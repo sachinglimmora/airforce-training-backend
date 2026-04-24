@@ -17,7 +17,7 @@ RUN pip install --upgrade pip && \
 
 # Copy application code
 COPY app ./app
-COPY alembic ./alembic
+COPY migrations ./migrations
 COPY alembic.ini ./
 COPY scripts ./scripts
 
