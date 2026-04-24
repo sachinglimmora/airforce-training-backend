@@ -1,0 +1,15 @@
+tags_metadata = [
+    {"name": "auth", "description": "Authentication — login, refresh, logout, profile"},
+    {"name": "users", "description": "User management and RBAC"},
+    {"name": "content", "description": "Content ingestion — FCOM, QRH, AMM, SOP, syllabus"},
+    {"name": "ai", "description": "AI / LLM gateway — completions, embeddings, usage"},
+    {"name": "checklists", "description": "Checklist engine — challenge/response, read-do, do-verify"},
+    {"name": "procedures", "description": "Normal and emergency procedure execution"},
+    {"name": "scenarios", "description": "High-risk scenarios — V1 cut, windshear, TCAS RA, engine fire"},
+    {"name": "analytics", "description": "Analytics and compliance reporting"},
+    {"name": "competency", "description": "Competency tracking and evaluation rubrics"},
+    {"name": "vr", "description": "VR telemetry ingestion (Subhash integration)"},
+    {"name": "audit", "description": "Audit log — tamper-evident hash chain"},
+    {"name": "assets", "description": "3D assets — glTF/glb files for cockpit and environments"},
+    {"name": "health", "description": "Health, readiness and metrics"},
+]

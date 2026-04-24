@@ -1,0 +1,79 @@
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    ENV: Literal["local", "staging", "production"] = "local"
+    LOG_LEVEL: str = "INFO"
+
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://aegis:aegis@localhost:5432/aegis"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Meilisearch
+    MEILI_URL: str = "http://localhost:7700"
+    MEILI_MASTER_KEY: str = "change-me"
+
+    # JWT
+    JWT_PRIVATE_KEY_PATH: str = "secrets/jwt_private.pem"
+    JWT_PUBLIC_KEY_PATH: str = "secrets/jwt_public.pem"
+    JWT_ACCESS_TTL_SECONDS: int = 900
+    JWT_REFRESH_TTL_SECONDS: int = 604800
+    JWT_ISSUER: str = "aegis-backend"
+
+    # AI
+    GEMINI_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    AI_CACHE_TTL_SECONDS: int = 86400
+    AI_RATE_LIMIT_TRAINEE: int = 60
+    AI_RATE_LIMIT_INSTRUCTOR: int = 200
+    AI_GLOBAL_RATE_LIMIT: int = 2000
+    AI_PROVIDER_TIMEOUT_SECONDS: int = 15
+
+    # MinIO
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = ""
+    MINIO_SECRET_KEY: str = ""
+    MINIO_BUCKET_ASSETS: str = "aegis-assets"
+    MINIO_SECURE: bool = False
+
+    # CORS
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000"
+
+    # Celery
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
+    @field_validator("CORS_ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors(cls, v: str) -> str:
+        return v
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",")]
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENV == "production"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
