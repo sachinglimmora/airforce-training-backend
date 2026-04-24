@@ -22,7 +22,7 @@ COPY alembic.ini ./
 COPY scripts ./scripts
 
 # Install the project itself
-RUN pip install -e .
+RUN pip install .
 RUN chmod +x ./scripts/start.sh
 
 EXPOSE 8000
