@@ -9,14 +9,20 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install .
+COPY pyproject.toml README.md* ./
+RUN pip install --upgrade pip && \
+    pip install fastapi uvicorn[standard] gunicorn sqlalchemy[asyncio] asyncpg alembic pydantic pydantic-settings \
+    pyjwt[crypto] bcrypt redis celery google-generativeai openai httpx structlog python-multipart \
+    meilisearch-python-async cryptography python-jose[cryptography] email-validator
 
 # Copy application code
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
-COPY scripts/start.sh ./scripts/start.sh
+COPY scripts ./scripts
+
+# Install the project itself
+RUN pip install -e .
 RUN chmod +x ./scripts/start.sh
 
 EXPOSE 8000
