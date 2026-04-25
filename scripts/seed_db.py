@@ -10,6 +10,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from dotenv import load_dotenv
+
+# Force load .env from current directory
+load_dotenv()
+
 from app.config import get_settings
 from app.core.security import hash_password
 from app.modules.auth.models import Permission, Role, RolePermission, User, UserRole
@@ -38,6 +43,7 @@ ADMIN_PASSWORD = "Aegis@Admin2026!"
 
 
 async def seed():
+    print(f"DEBUG: Using database URL: {settings.DATABASE_URL}")
     async with AsyncSession_() as db:
         async with db.begin():
             # Roles
