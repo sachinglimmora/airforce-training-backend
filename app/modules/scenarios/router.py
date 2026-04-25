@@ -12,6 +12,8 @@ from app.modules.auth.schemas import CurrentUser
 from app.modules.scenarios.models import Scenario, ScenarioSession
 
 router = APIRouter()
+# Alias for frontend
+simulations_router = APIRouter()
 
 
 class TriggerRequest(BaseModel):
@@ -25,6 +27,7 @@ class ActionRequest(BaseModel):
 
 
 @router.get("", summary="List scenarios")
+@simulations_router.get("", summary="List simulations")
 async def list_scenarios(
     current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
@@ -45,6 +48,7 @@ async def list_scenarios(
 
 
 @router.get("/{scenario_id}", summary="Get scenario config")
+@simulations_router.get("/{scenario_id}", summary="Get simulation config")
 async def get_scenario(
     scenario_id: str,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -69,6 +73,7 @@ async def get_scenario(
 
 
 @router.post("/{scenario_id}/sessions", status_code=201, summary="Start scenario session")
+@simulations_router.post("/{scenario_id}/start", status_code=201, summary="Start simulation session")
 async def start_session(
     scenario_id: str,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -124,3 +129,26 @@ async def get_result(
         from app.core.exceptions import NotFound
         raise NotFound("Scenario session")
     return {"data": {"session_id": session_id, "result": session.result, "status": session.status}}
+
+
+@simulations_router.post("/{scenario_id}/complete", summary="Complete simulation session")
+async def complete_simulation(
+    scenario_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from datetime import UTC, datetime
+    # Find the most recent session for this scenario and user
+    result = await db.execute(
+        select(ScenarioSession)
+        .where(ScenarioSession.scenario_id == scenario_id, ScenarioSession.trainee_id == current_user.id)
+        .order_by(ScenarioSession.started_at.desc())
+        .limit(1)
+    )
+    session = result.scalar_one_or_none()
+    if session:
+        session.status = "completed"
+        session.completed_at = datetime.now(UTC)
+        await db.commit()
+        return {"data": {"success": True, "message": "Simulation completed"}}
+    return {"data": {"success": False, "message": "No active session found"}}

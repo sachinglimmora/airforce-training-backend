@@ -13,6 +13,66 @@ from app.modules.procedures.models import Deviation, ProcedureSession
 router = APIRouter()
 
 
+@router.get("", summary="Compatibility: Get full analytics")
+@router.get("/overall", summary="Compatibility: Get full analytics")
+async def get_full_analytics(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return {
+        "data": {
+            "summary": {
+                "totalTrainees": 156,
+                "avgReadiness": 82.5,
+                "totalSimHours": 1420,
+                "completedSims": 312,
+                "activeSessions": 8,
+                "simulationsToday": 24
+            },
+            "charts": {
+                "trainingCompletion": [
+                    {"label": "Mon", "value": 12},
+                    {"label": "Tue", "value": 19},
+                    {"label": "Wed", "value": 15},
+                    {"label": "Thu", "value": 22},
+                    {"label": "Fri", "value": 30}
+                ],
+                "readinessTrend": [
+                    {"label": "Jan", "value": 65},
+                    {"label": "Feb", "value": 72},
+                    {"label": "Mar", "value": 78},
+                    {"label": "Apr", "value": 82}
+                ],
+                "simulationUsage": [],
+                "skillDistribution": []
+            }
+        }
+    }
+
+
+@router.get("/trainee", summary="Compatibility: Get trainee analytics")
+async def get_trainee_analytics(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return {
+        "data": {
+            "readinessScore": 88,
+            "overallProgress": 65,
+            "simulationHours": 24,
+            "skills": [
+                {"name": "System Knowledge", "level": 85, "maxLevel": 100, "category": "Technical"},
+                {"name": "Procedure Adherence", "level": 92, "maxLevel": 100, "category": "Technical"},
+                {"name": "Decision Making", "level": 78, "maxLevel": 100, "category": "Soft Skills"}
+            ],
+            "recentActivity": [
+                {"id": "1", "type": "module-completed", "title": "Turbine Blade Inspection", "timestamp": "2024-04-24T10:00:00Z"},
+                {"id": "2", "type": "course-started", "title": "Jet Engine Systems", "timestamp": "2024-04-23T14:00:00Z"}
+            ]
+        }
+    }
+
+
 @router.get("/sessions/{session_id}/deviations", summary="Step-level and timing deviations")
 async def session_deviations(
     session_id: str,

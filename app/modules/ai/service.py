@@ -1,4 +1,6 @@
+import asyncio
 import uuid
+from decimal import Decimal
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,11 +37,11 @@ class AIService:
         # PII filter
         messages = filter_messages(messages)
 
-        # Cache lookup (only for low-temperature deterministic requests)
-        cache_hit = False
         cache_key = _make_cache_key(
             req.provider_preference, "", [m["content"] for m in messages], req.temperature, req.context_citations
         )
+
+        # Cache lookup (only for low-temperature deterministic requests)
         if req.cache and req.temperature < 0.3:
             cached = await get_cached(cache_key)
             if cached:
@@ -74,6 +76,19 @@ class AIService:
         if req.cache and req.temperature < 0.3:
             await set_cached(cache_key, response)
 
+        await self._log_request(
+            user_id=user_id,
+            provider=provider_name,
+            model=result.model,
+            prompt_hash=cache_key,
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+            cost_usd=result.cost_usd,
+            cached=False,
+            status="success",
+            citations=req.context_citations,
+        )
+
         log.info("ai_complete", provider=provider_name, request_id=request_id, user_id=user_id)
         return response
 
@@ -102,20 +117,50 @@ class AIService:
         else:
             providers = [(_gemini, "gemini"), (_openai, "openai")]
 
-        last_error = None
         for provider, name in providers:
             try:
-                import asyncio
                 result = await asyncio.wait_for(
                     provider.complete(req),
                     timeout=settings.AI_PROVIDER_TIMEOUT_SECONDS,
                 )
                 return result, name
-            except Exception as e:
-                log.warning("ai_provider_failed", provider=name, error=str(e))
-                last_error = e
+            except Exception as exc:
+                log.warning("ai_provider_failed", provider=name, error=str(exc))
 
         raise AllProvidersDown()
+
+    async def _log_request(
+        self,
+        user_id: str,
+        provider: str,
+        model: str,
+        prompt_hash: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cost_usd: float,
+        cached: bool,
+        status: str,
+        citations: list[str],
+    ) -> None:
+        try:
+            from app.modules.ai.models import AIRequest
+
+            entry = AIRequest(
+                user_id=user_id,
+                provider=provider,
+                model=model,
+                prompt_hash=prompt_hash,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost_usd=Decimal(str(cost_usd)),
+                cached=cached,
+                status=status,
+                citations=citations,
+            )
+            self.db.add(entry)
+            await self.db.flush()
+        except Exception as exc:
+            log.warning("ai_request_log_failed", error=str(exc))
 
     async def _resolve_citations(self, citation_keys: list[str]) -> str:
         from sqlalchemy import select

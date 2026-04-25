@@ -16,8 +16,39 @@ settings = get_settings()
 
 
 def _presigned_url(storage_url: str) -> str:
-    """Generate a presigned MinIO URL. Stub returns storage_url for local dev."""
-    return storage_url
+    """Return a 15-min presigned GET URL for the given MinIO storage_url.
+
+    storage_url is expected to be a MinIO object path of the form
+    ``bucket/object/key``. Falls back to the raw URL if MinIO is not
+    configured (e.g. local dev without credentials).
+    """
+    if not settings.MINIO_ACCESS_KEY or not settings.MINIO_SECRET_KEY:
+        return storage_url
+
+    try:
+        from minio import Minio
+        from datetime import timedelta
+
+        client = Minio(
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_SECURE,
+        )
+        # storage_url may be a full path like "aegis-assets/cockpit/b737.glb"
+        # or a bare object key. Normalise to bucket + object_key.
+        path = storage_url.lstrip("/")
+        if "/" in path:
+            bucket, object_key = path.split("/", 1)
+        else:
+            bucket = settings.MINIO_BUCKET_ASSETS
+            object_key = path
+
+        return client.presigned_get_object(
+            bucket, object_key, expires=timedelta(seconds=900)
+        )
+    except Exception:
+        return storage_url
 
 
 @router.get("", summary="List assets (metadata only)")
@@ -25,7 +56,7 @@ async def list_assets(
     aircraft_id: str | None = Query(None),
     asset_type: str | None = Query(None),
     fidelity: str | None = Query(None),
-    current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     q = select(Asset)
@@ -57,7 +88,7 @@ async def list_assets(
 @router.get("/{asset_id}", summary="Get asset metadata")
 async def get_asset(
     asset_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Asset).where(Asset.id == asset_id))
@@ -81,7 +112,7 @@ async def get_asset(
 @router.get("/{asset_id}/download", summary="Get presigned download URL (15-min expiry)")
 async def download_asset(
     asset_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Asset).where(Asset.id == asset_id))

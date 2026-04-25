@@ -1,6 +1,5 @@
 from typing import Annotated
 
-import uuid
 from fastapi import Depends, Query
 from fastapi.routing import APIRouter
 from pydantic import BaseModel
@@ -28,7 +27,7 @@ class ItemActionRequest(BaseModel):
 async def list_checklists(
     aircraft_id: str | None = Query(None),
     phase: str | None = Query(None),
-    current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     q = select(Checklist)
@@ -44,7 +43,7 @@ async def list_checklists(
 @router.get("/{checklist_id}", summary="Get checklist definition")
 async def get_checklist(
     checklist_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Checklist).where(Checklist.id == checklist_id))
@@ -81,13 +80,11 @@ async def start_session(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from app.modules.analytics.models import TrainingSession
-    
-    # Create unified training session
+
     ts = TrainingSession(
         trainee_id=body.trainee_id or current_user.id,
         session_type="checklist",
-        procedure_id=None, # Linking to checklist handled via metadata or specific field if added
-        status="in_progress"
+        status="in_progress",
     )
     db.add(ts)
     await db.flush()
@@ -123,8 +120,27 @@ async def start_session(
     }
 
 
-@router.post("/sessions/{session_id}/items/{item_id}/action", summary="Perform action on checklist item")
-async def item_action(
+@router.post("/sessions/{session_id}/items/{item_id}/call", summary="Trainee calls a checklist item (challenge)")
+async def call_item(
+    session_id: str,
+    item_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.analytics.models import SessionEvent
+
+    event = SessionEvent(
+        session_id=session_id,
+        event_type="checklist_item_called",
+        payload={"item_id": item_id, "actor": str(current_user.id)},
+    )
+    db.add(event)
+    await db.commit()
+    return {"data": {"session_id": session_id, "item_id": item_id, "status": "called"}}
+
+
+@router.post("/sessions/{session_id}/items/{item_id}/respond", summary="Respond to a checklist item (response)")
+async def respond_item(
     session_id: str,
     item_id: str,
     body: ItemActionRequest,
@@ -132,26 +148,25 @@ async def item_action(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from app.modules.analytics.models import SessionEvent
-    
-    # Record completion event
+
     event = SessionEvent(
         session_id=session_id,
-        event_type="checklist_item_called",
-        payload={"item_id": item_id, "response": body.response}
+        event_type="checklist_item_responded",
+        payload={"item_id": item_id, "response": body.response, "actor": str(current_user.id)},
     )
     db.add(event)
     await db.commit()
-    
-    return {"data": {"session_id": session_id, "item_id": item_id, "status": "recorded"}}
+    return {"data": {"session_id": session_id, "item_id": item_id, "response": body.response, "status": "responded"}}
 
 
 @router.post("/sessions/{session_id}/complete", status_code=200, summary="Complete checklist session")
 async def complete_session(
     session_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from datetime import UTC, datetime
+
     result = await db.execute(select(ChecklistSession).where(ChecklistSession.id == session_id))
     session = result.scalar_one_or_none()
     if session:
@@ -163,7 +178,7 @@ async def complete_session(
 @router.get("/sessions/{session_id}", summary="Get checklist session state")
 async def get_session(
     session_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(ChecklistSession).where(ChecklistSession.id == session_id))
