@@ -12,8 +12,10 @@ from app.modules.auth.schemas import CurrentUser
 from app.modules.scenarios.models import Scenario, ScenarioSession
 
 router = APIRouter()
-# Alias for frontend
 simulations_router = APIRouter()
+
+_401 = {401: {"description": "Not authenticated"}}
+_404 = {404: {"description": "Not found"}}
 
 
 class TriggerRequest(BaseModel):
@@ -26,10 +28,26 @@ class ActionRequest(BaseModel):
     payload: dict = {}
 
 
-@router.get("", summary="List scenarios")
-@simulations_router.get("", summary="List simulations")
+@router.get(
+    "",
+    response_model=dict,
+    summary="List scenarios",
+    description=(
+        "Returns all configured high-risk scenarios: V1 cut, windshear, TCAS RA, engine fire, and custom."
+    ),
+    responses={**_401},
+    operation_id="scenarios_list",
+)
+@simulations_router.get(
+    "",
+    response_model=dict,
+    summary="List simulations (alias)",
+    description="Alias for `GET /scenarios`. Prefer `/scenarios` for new integrations.",
+    responses={**_401},
+    operation_id="simulations_list",
+)
 async def list_scenarios(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     result = await db.execute(select(Scenario))
@@ -41,17 +59,35 @@ async def list_scenarios(
                 "scenario_code": s.scenario_code,
                 "name": s.name,
                 "scenario_type": s.scenario_type,
+                "description": s.description,
             }
             for s in scenarios
         ]
     }
 
 
-@router.get("/{scenario_id}", summary="Get scenario config")
-@simulations_router.get("/{scenario_id}", summary="Get simulation config")
+@router.get(
+    "/{scenario_id}",
+    response_model=dict,
+    summary="Get scenario configuration",
+    description=(
+        "Returns full scenario config including `initial_conditions` (aircraft state at scenario start) "
+        "and `trigger_config` (event that fires the scenario, e.g. engine failure at V1)."
+    ),
+    responses={**_401, **_404},
+    operation_id="scenarios_get",
+)
+@simulations_router.get(
+    "/{scenario_id}",
+    response_model=dict,
+    summary="Get simulation config (alias)",
+    description="Alias for `GET /scenarios/{scenario_id}`.",
+    responses={**_401, **_404},
+    operation_id="simulations_get",
+)
 async def get_scenario(
     scenario_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Scenario).where(Scenario.id == scenario_id))
@@ -65,6 +101,7 @@ async def get_scenario(
             "scenario_code": s.scenario_code,
             "name": s.name,
             "scenario_type": s.scenario_type,
+            "description": s.description,
             "initial_conditions": s.initial_conditions,
             "trigger_config": s.trigger_config,
             "procedure_id": str(s.procedure_id) if s.procedure_id else None,
@@ -72,8 +109,29 @@ async def get_scenario(
     }
 
 
-@router.post("/{scenario_id}/sessions", status_code=201, summary="Start scenario session")
-@simulations_router.post("/{scenario_id}/start", status_code=201, summary="Start simulation session")
+@router.post(
+    "/{scenario_id}/sessions",
+    status_code=201,
+    response_model=dict,
+    summary="Start a scenario session",
+    description=(
+        "Creates a `ScenarioSession` for the calling trainee. "
+        "Returns `session_id` used in trigger and action calls.\n\n"
+        "**Session flow:** start → `POST /sessions/{sid}/trigger` → "
+        "loop `POST /sessions/{sid}/action` → `GET /sessions/{sid}/result`"
+    ),
+    responses={**_401, **_404},
+    operation_id="scenarios_start_session",
+)
+@simulations_router.post(
+    "/{scenario_id}/start",
+    status_code=201,
+    response_model=dict,
+    summary="Start a simulation session (alias)",
+    description="Alias for `POST /scenarios/{scenario_id}/sessions`.",
+    responses={**_401, **_404},
+    operation_id="simulations_start_session",
+)
 async def start_session(
     scenario_id: str,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -92,35 +150,75 @@ async def start_session(
     }
 
 
-@router.post("/sessions/{session_id}/trigger", summary="Fire the trigger event")
+@router.post(
+    "/sessions/{session_id}/trigger",
+    response_model=dict,
+    summary="Fire the scenario trigger event",
+    description=(
+        "Fires the configured trigger event for this session "
+        "(e.g. engine failure at V1, windshear at 500 ft, TCAS RA).\n\n"
+        "Body: `{ \"event\": \"engine_failure_at_v1\", \"payload\": { ... } }`\n\n"
+        "Records `trigger_fired_at` on the session."
+    ),
+    responses={**_401},
+    operation_id="scenarios_trigger",
+)
 async def trigger_event(
     session_id: str,
     body: TriggerRequest,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from datetime import UTC, datetime
+
     result = await db.execute(select(ScenarioSession).where(ScenarioSession.id == session_id))
     session = result.scalar_one_or_none()
     if session:
         session.trigger_fired_at = datetime.now(UTC)
-    return {"data": {"session_id": session_id, "trigger": body.event, "fired_at": session.trigger_fired_at.isoformat() if session else None}}
+    return {
+        "data": {
+            "session_id": session_id,
+            "trigger": body.event,
+            "fired_at": session.trigger_fired_at.isoformat() if session else None,
+        }
+    }
 
 
-@router.post("/sessions/{session_id}/action", summary="Trainee action")
+@router.post(
+    "/sessions/{session_id}/action",
+    response_model=dict,
+    summary="Record a trainee action",
+    description=(
+        "Records a discrete trainee action during a scenario session "
+        "(e.g. moving a throttle, pressing a switch, declaring MAYDAY).\n\n"
+        "Body: `{ \"action\": \"throttle_idle_affected_engine\", \"payload\": { ... } }`"
+    ),
+    responses={**_401},
+    operation_id="scenarios_action",
+)
 async def record_action(
     session_id: str,
     body: ActionRequest,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _db: Annotated[AsyncSession, Depends(get_db)],
 ):
     return {"data": {"session_id": session_id, "action": body.action, "recorded": True}}
 
 
-@router.get("/sessions/{session_id}/result", summary="Get scored result")
+@router.get(
+    "/sessions/{session_id}/result",
+    response_model=dict,
+    summary="Get scored scenario result",
+    description=(
+        "Returns the final scored result for a completed scenario session. "
+        "`result` is a JSONB object written by the scoring engine when the session ends."
+    ),
+    responses={**_401, **_404},
+    operation_id="scenarios_result",
+)
 async def get_result(
     session_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(ScenarioSession).where(ScenarioSession.id == session_id))
@@ -131,14 +229,21 @@ async def get_result(
     return {"data": {"session_id": session_id, "result": session.result, "status": session.status}}
 
 
-@simulations_router.post("/{scenario_id}/complete", summary="Complete simulation session")
+@simulations_router.post(
+    "/{scenario_id}/complete",
+    response_model=dict,
+    summary="Complete a simulation session (alias)",
+    description="Marks the most recent active session for this scenario and user as completed.",
+    responses={**_401},
+    operation_id="simulations_complete_session",
+)
 async def complete_simulation(
     scenario_id: str,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from datetime import UTC, datetime
-    # Find the most recent session for this scenario and user
+
     result = await db.execute(
         select(ScenarioSession)
         .where(ScenarioSession.scenario_id == scenario_id, ScenarioSession.trainee_id == current_user.id)
@@ -148,7 +253,7 @@ async def complete_simulation(
     session = result.scalar_one_or_none()
     if session:
         session.status = "completed"
-        session.completed_at = datetime.now(UTC)
+        session.ended_at = datetime.now(UTC)
         await db.commit()
         return {"data": {"success": True, "message": "Simulation completed"}}
     return {"data": {"success": False, "message": "No active session found"}}

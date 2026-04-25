@@ -13,6 +13,9 @@ from app.modules.checklist.models import Checklist, ChecklistSession
 
 router = APIRouter()
 
+_401 = {401: {"description": "Not authenticated"}}
+_404 = {404: {"description": "Not found"}}
+
 
 class StartSessionRequest(BaseModel):
     mode: str = "challenge_response"
@@ -23,10 +26,20 @@ class ItemActionRequest(BaseModel):
     response: str | None = None
 
 
-@router.get("", summary="List checklists")
+@router.get(
+    "",
+    response_model=dict,
+    summary="List checklists",
+    description=(
+        "Returns all available checklists. Filter by `aircraft_id` or `phase` "
+        "(pre-flight | takeoff | cruise | approach | landing | shutdown)."
+    ),
+    responses={**_401},
+    operation_id="checklists_list",
+)
 async def list_checklists(
-    aircraft_id: str | None = Query(None),
-    phase: str | None = Query(None),
+    aircraft_id: str | None = Query(None, description="Filter by aircraft UUID"),
+    phase: str | None = Query(None, description="pre-flight | takeoff | cruise | approach | landing | shutdown"),
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
@@ -40,7 +53,17 @@ async def list_checklists(
     return {"data": [{"id": str(c.id), "name": c.name, "phase": c.phase} for c in checklists]}
 
 
-@router.get("/{checklist_id}", summary="Get checklist definition")
+@router.get(
+    "/{checklist_id}",
+    response_model=dict,
+    summary="Get checklist definition with all items",
+    description=(
+        "Returns the full checklist including every item's challenge text, expected response, "
+        "execution mode, target time, and criticality flag."
+    ),
+    responses={**_401, **_404},
+    operation_id="checklists_get",
+)
 async def get_checklist(
     checklist_id: str,
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -72,7 +95,24 @@ async def get_checklist(
     }
 
 
-@router.post("/{checklist_id}/sessions", status_code=201, summary="Start checklist session")
+@router.post(
+    "/{checklist_id}/sessions",
+    status_code=201,
+    response_model=dict,
+    summary="Start a checklist execution session",
+    description=(
+        "Creates a new checklist session and returns the ordered item list ready for execution.\n\n"
+        "- `mode` — `challenge_response` (default) | `read_do` | `do_verify`\n"
+        "- `trainee_id` — optional; if omitted the calling user is the trainee "
+        "(instructors supply this to run a session on behalf of a trainee)\n\n"
+        "**Session flow after this call:**\n"
+        "`POST /sessions/{sid}/items/{item_id}/call` → "
+        "`POST /sessions/{sid}/items/{item_id}/respond` → "
+        "`POST /sessions/{sid}/complete`"
+    ),
+    responses={**_401, **_404},
+    operation_id="checklists_start_session",
+)
 async def start_session(
     checklist_id: str,
     body: StartSessionRequest,
@@ -120,7 +160,18 @@ async def start_session(
     }
 
 
-@router.post("/sessions/{session_id}/items/{item_id}/call", summary="Trainee calls a checklist item (challenge)")
+@router.post(
+    "/sessions/{session_id}/items/{item_id}/call",
+    response_model=dict,
+    summary="Call a checklist item (challenge side)",
+    description=(
+        "Records that the challenge side has called the item. "
+        "In `challenge_response` mode this is the Pilot Monitoring reading the challenge aloud. "
+        "Logs a `checklist_item_called` session event."
+    ),
+    responses={**_401},
+    operation_id="checklists_call_item",
+)
 async def call_item(
     session_id: str,
     item_id: str,
@@ -139,7 +190,18 @@ async def call_item(
     return {"data": {"session_id": session_id, "item_id": item_id, "status": "called"}}
 
 
-@router.post("/sessions/{session_id}/items/{item_id}/respond", summary="Respond to a checklist item (response)")
+@router.post(
+    "/sessions/{session_id}/items/{item_id}/respond",
+    response_model=dict,
+    summary="Respond to a checklist item (response side)",
+    description=(
+        "Records the response to a previously called item. "
+        "In `challenge_response` mode this is the Pilot Flying reading the response aloud.\n\n"
+        "Body: `{ \"response\": \"SET\" }` — the actual response text spoken by the trainee."
+    ),
+    responses={**_401},
+    operation_id="checklists_respond_item",
+)
 async def respond_item(
     session_id: str,
     item_id: str,
@@ -159,7 +221,18 @@ async def respond_item(
     return {"data": {"session_id": session_id, "item_id": item_id, "response": body.response, "status": "responded"}}
 
 
-@router.post("/sessions/{session_id}/complete", status_code=200, summary="Complete checklist session")
+@router.post(
+    "/sessions/{session_id}/complete",
+    response_model=dict,
+    summary="Complete a checklist session",
+    description=(
+        "Marks the session as completed and sets `ended_at`. "
+        "The scoring engine computes items responded / total, timing violations, "
+        "and critical-item misses. Call after all items have been responded to."
+    ),
+    responses={**_401, **_404},
+    operation_id="checklists_complete_session",
+)
 async def complete_session(
     session_id: str,
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -175,7 +248,14 @@ async def complete_session(
     return {"data": {"session_id": session_id, "status": "completed"}}
 
 
-@router.get("/sessions/{session_id}", summary="Get checklist session state")
+@router.get(
+    "/sessions/{session_id}",
+    response_model=dict,
+    summary="Get checklist session state and results",
+    description="Returns the current status, start/end timestamps for a checklist session.",
+    responses={**_401, **_404},
+    operation_id="checklists_get_session",
+)
 async def get_session(
     session_id: str,
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],

@@ -14,6 +14,10 @@ from app.modules.competency.models import Competency, Evaluation, Rubric
 
 router = APIRouter()
 
+_401 = {401: {"description": "Not authenticated"}}
+_403 = {403: {"description": "Insufficient permissions"}}
+_404 = {404: {"description": "Not found"}}
+
 
 class CreateRubricRequest(BaseModel):
     name: str
@@ -30,9 +34,20 @@ class CreateEvaluationRequest(BaseModel):
     comments: str | None = None
 
 
-@router.get("/competencies", summary="List competencies")
+@router.get(
+    "/competencies",
+    response_model=dict,
+    summary="List all competency definitions",
+    description=(
+        "Returns the full competency catalogue with codes, names, and categories.\n\n"
+        "Example codes: `PROC-ADH` (Procedural Adherence), `CRM` (Crew Resource Management), "
+        "`DECISION` (Decision Making), `SIT-AWR` (Situational Awareness)."
+    ),
+    responses={**_401},
+    operation_id="competencies_list",
+)
 async def list_competencies(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     result = await db.execute(select(Competency))
@@ -45,10 +60,21 @@ async def list_competencies(
     }
 
 
-@router.get("/trainees/{trainee_id}/competencies", summary="Trainee competency evidence map")
+@router.get(
+    "/trainees/{trainee_id}/competencies",
+    response_model=dict,
+    summary="Get a trainee's competency evidence map",
+    description=(
+        "Returns all competency evidence records for a trainee — one entry per "
+        "competency per session where evidence was recorded. "
+        "Use this to plot progression over time."
+    ),
+    responses={**_401, **_403},
+    operation_id="competencies_trainee_evidence",
+)
 async def trainee_competencies(
     trainee_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from app.modules.competency.models import CompetencyEvidence
@@ -68,9 +94,16 @@ async def trainee_competencies(
     }
 
 
-@router.get("/rubrics", summary="List rubrics")
+@router.get(
+    "/rubrics",
+    response_model=dict,
+    summary="List evaluation rubrics",
+    description="Returns all rubrics with their names and maximum scores.",
+    responses={**_401},
+    operation_id="rubrics_list",
+)
 async def list_rubrics(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
     result = await db.execute(select(Rubric))
@@ -78,10 +111,29 @@ async def list_rubrics(
     return {"data": [{"id": str(r.id), "name": r.name, "max_score": float(r.max_score)} for r in rubrics]}
 
 
-@router.post("/rubrics", status_code=201, summary="Create rubric")
+@router.post(
+    "/rubrics",
+    status_code=201,
+    response_model=dict,
+    summary="Create an evaluation rubric",
+    description=(
+        "Creates a new rubric with weighted criteria. "
+        "Optionally link to a specific `procedure_id` or `scenario_id`.\n\n"
+        "Criteria format:\n"
+        "```json\n"
+        "{\n"
+        "  \"procedural_compliance\": { \"weight\": 0.40, \"max\": 10 },\n"
+        "  \"crm\":                   { \"weight\": 0.15, \"max\": 10 }\n"
+        "}\n"
+        "```\n\n"
+        "**Required permission:** `rubric:create`"
+    ),
+    responses={**_401, **_403},
+    operation_id="rubrics_create",
+)
 async def create_rubric(
     body: CreateRubricRequest,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     rubric = Rubric(
@@ -96,10 +148,17 @@ async def create_rubric(
     return {"data": {"id": str(rubric.id), "name": rubric.name}}
 
 
-@router.get("/rubrics/{rubric_id}", summary="Get rubric")
+@router.get(
+    "/rubrics/{rubric_id}",
+    response_model=dict,
+    summary="Get a rubric with full criteria",
+    description="Returns the rubric definition including all weighted criteria and max score.",
+    responses={**_401, **_404},
+    operation_id="rubrics_get",
+)
 async def get_rubric(
     rubric_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Rubric).where(Rubric.id == rubric_id))
@@ -110,7 +169,22 @@ async def get_rubric(
     return {"data": {"id": str(r.id), "name": r.name, "criteria": r.criteria, "max_score": float(r.max_score)}}
 
 
-@router.post("/sessions/{session_id}/evaluations", status_code=201, summary="Submit evaluation")
+@router.post(
+    "/sessions/{session_id}/evaluations",
+    status_code=201,
+    response_model=dict,
+    summary="Submit a session evaluation",
+    description=(
+        "Records a graded evaluation against a rubric for a completed session.\n\n"
+        "- `rubric_id` — the rubric to evaluate against\n"
+        "- `scores` — map of criterion name → numeric score\n"
+        "- `grade` — `excellent` | `satisfactory` | `needs_improvement` | `unsatisfactory`\n"
+        "- `comments` — optional free-text instructor feedback\n\n"
+        "**Required permission:** `evaluation:create`"
+    ),
+    responses={**_401, **_403, 404: {"description": "Session or rubric not found"}},
+    operation_id="evaluations_create",
+)
 async def create_evaluation(
     session_id: str,
     body: CreateEvaluationRequest,
@@ -139,10 +213,17 @@ async def create_evaluation(
     }
 
 
-@router.get("/evaluations/{evaluation_id}", summary="Get evaluation")
+@router.get(
+    "/evaluations/{evaluation_id}",
+    response_model=dict,
+    summary="Get an evaluation",
+    description="Returns the full evaluation record including scores, grade, comments, and timestamp.",
+    responses={**_401, **_404},
+    operation_id="evaluations_get",
+)
 async def get_evaluation(
     evaluation_id: str,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Evaluation).where(Evaluation.id == evaluation_id))
@@ -163,11 +244,22 @@ async def get_evaluation(
     }
 
 
-@router.patch("/evaluations/{evaluation_id}", summary="Update evaluation")
+@router.patch(
+    "/evaluations/{evaluation_id}",
+    response_model=dict,
+    summary="Update an evaluation",
+    description=(
+        "Partial update of a submitted evaluation. "
+        "Editable within 24 h of submission by the original evaluator or an admin.\n\n"
+        "Updatable fields: `comments`, `grade`."
+    ),
+    responses={**_401, **_403, **_404},
+    operation_id="evaluations_update",
+)
 async def update_evaluation(
     evaluation_id: str,
     body: dict,
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Evaluation).where(Evaluation.id == evaluation_id))
