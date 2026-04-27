@@ -13,3 +13,7 @@ htmlcov/
 .coverage
 secrets/
 *.pem
+
+# Personal research / interview notes (per-developer, not shared)
+personal/
+
