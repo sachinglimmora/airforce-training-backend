@@ -181,6 +181,34 @@ async def approve_source(
 
 
 @router.post(
+    "/sources/{source_id}/reembed",
+    status_code=202,
+    response_model=dict,
+    summary="Force re-embedding of a source (admin)",
+    description=(
+        "Deletes existing chunks for the source_id and re-runs the embedding worker. "
+        "Use after chunker improvements or model changes.\n\n"
+        "**Required permission:** `content:approve` (admin/instructor)."
+    ),
+    responses={**_401, **_403, **_404},
+    operation_id="content_sources_reembed",
+)
+async def reembed_source_endpoint(
+    source_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.role not in ("admin", "instructor"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    svc = ContentService(db)
+    src = await svc.get_source(source_id)  # 404s if missing
+    from app.modules.rag.tasks import reembed_source
+    reembed_source.delay(str(src.id))
+    return {"data": {"source_id": str(src.id), "status": "reembedding"}}
+
+
+@router.post(
     "/sources/{source_id}/archive",
     response_model=dict,
     summary="Archive a content source",

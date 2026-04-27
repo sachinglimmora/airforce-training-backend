@@ -32,6 +32,21 @@ async def _load_source_with_tree(db, source_id: str) -> ContentSource | None:
     return result.scalar_one_or_none()
 
 
+async def _delete_chunks(db, source_id: str) -> int:
+    from sqlalchemy import delete
+    result = await db.execute(delete(ContentChunk).where(ContentChunk.source_id == source_id))
+    return result.rowcount or 0
+
+
+async def _reembed_source_async(source_id: str) -> int:
+    async with AsyncSessionLocal() as db:
+        deleted = await _delete_chunks(db, source_id)
+        await db.commit()
+        log.info("reembed_source_deleted", source_id=source_id, count=deleted)
+    # Now run normal ingestion
+    return await _embed_source_async(source_id)
+
+
 async def _embed_source_async(source_id: str) -> int:
     async with AsyncSessionLocal() as db:
         source = await _load_source_with_tree(db, source_id)
@@ -104,9 +119,9 @@ def embed_source(source_id: str) -> int:
     return asyncio.run(_embed_source_async(source_id))
 
 
-@celery_app.task(name="rag.reembed_source")
+@celery_app.task(name="rag.reembed_source", autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def reembed_source(source_id: str) -> int:
-    raise NotImplementedError
+    return asyncio.run(_reembed_source_async(source_id))
 
 
 @celery_app.task(name="rag.reembed_all_dim_mismatch")
