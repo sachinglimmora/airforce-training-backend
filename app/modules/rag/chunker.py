@@ -68,6 +68,39 @@ def _chunk_one_section(section, ordinal_start: int) -> list[dict]:
     return chunks
 
 
+def _merge_small_siblings(chunks: list[dict]) -> list[dict]:
+    threshold = _settings.RAG_CHUNK_TOKENS_MIN_MERGE
+    merged: list[dict] = []
+    i = 0
+    while i < len(chunks):
+        current = chunks[i]
+        # only merge consecutive single-citation chunks both under threshold
+        if (
+            i + 1 < len(chunks)
+            and current["token_count"] < threshold
+            and chunks[i + 1]["token_count"] < threshold
+            and len(current["citation_keys"]) == 1
+            and len(chunks[i + 1]["citation_keys"]) == 1
+        ):
+            nxt = chunks[i + 1]
+            merged.append({
+                "section_id": current["section_id"],  # arbitrary; first wins
+                "citation_keys": current["citation_keys"] + nxt["citation_keys"],
+                "content": current["content"] + "\n\n" + nxt["content"],
+                "token_count": current["token_count"] + nxt["token_count"],
+                "ordinal": current["ordinal"],
+                "page_number": current["page_number"],
+            })
+            i += 2
+        else:
+            merged.append(current)
+            i += 1
+    # Re-sequence ordinals
+    for idx, c in enumerate(merged):
+        c["ordinal"] = idx
+    return merged
+
+
 def chunk_section_tree(source) -> list[dict]:
     """Walk the section tree and produce a flat list of chunk dicts.
 
@@ -84,4 +117,4 @@ def chunk_section_tree(source) -> list[dict]:
                 walk(sec.children)
 
     walk(source.sections)
-    return chunks
+    return _merge_small_siblings(chunks)

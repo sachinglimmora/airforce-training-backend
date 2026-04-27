@@ -78,3 +78,16 @@ def test_walks_children():
     chunks = chunk_section_tree(src)
     keys = sorted({k for c in chunks for k in c["citation_keys"]})
     assert keys == ["K-3", "K-3.1"]
+
+
+def test_tiny_adjacent_siblings_merge():
+    parent = _section("3", "Parent", "", "K-3")
+    a = _section("3.1", "A", "tiny.", "K-3.1")
+    b = _section("3.2", "B", "also tiny.", "K-3.2")
+    parent.children = [a, b]
+    src = FakeSource(id=uuid4(), sections=[parent])
+    chunks = chunk_section_tree(src)
+    # parent has empty body -> 0 chunks; a and b should merge
+    merged = [c for c in chunks if len(c["citation_keys"]) > 1]
+    assert len(merged) == 1
+    assert sorted(merged[0]["citation_keys"]) == ["K-3.1", "K-3.2"]
