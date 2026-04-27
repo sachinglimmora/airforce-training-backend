@@ -42,7 +42,7 @@ class GeminiProvider:
         usage = response.usage_metadata
         prompt_tokens = getattr(usage, "prompt_token_count", 0)
         completion_tokens = getattr(usage, "candidates_token_count", 0)
-        cost = (prompt_tokens * 0.0000035 + completion_tokens * 0.0000105)
+        cost = prompt_tokens * 0.0000035 + completion_tokens * 0.0000105
 
         log.info("gemini_complete", elapsed_ms=elapsed_ms, prompt_tokens=prompt_tokens)
         return CompletionResponse(
@@ -57,12 +57,19 @@ class GeminiProvider:
         import google.generativeai as genai
 
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        result = genai.embed_content(model=model or self._EMBED_MODEL, content=texts, task_type="retrieval_document")
-        embeddings = result["embedding"] if isinstance(result["embedding"][0], list) else [result["embedding"]]
+        result = genai.embed_content(
+            model=model or self._EMBED_MODEL, content=texts, task_type="retrieval_document"
+        )
+        embeddings = (
+            result["embedding"]
+            if isinstance(result["embedding"][0], list)
+            else [result["embedding"]]
+        )
         return EmbedResponse(embeddings=embeddings, model=model, total_tokens=0)
 
     async def health_check(self) -> ProviderHealth:
         import httpx
+
         start = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=5) as client:

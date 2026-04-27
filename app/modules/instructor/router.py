@@ -11,9 +11,7 @@ from app.modules.analytics.models import TrainingSession
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
 from app.modules.instructor.schemas import (
-    InstructorAnalytics,
     ScenarioOut,
-    TraineeOverview,
     TrainingSessionCreate,
     TrainingSessionOut,
     TrainingSessionUpdate,

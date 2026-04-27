@@ -5,11 +5,11 @@ from fastapi.routing import APIRouter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.modules.assets.models import Asset
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
-from app.config import get_settings
 
 router = APIRouter()
 settings = get_settings()
@@ -26,8 +26,9 @@ def _presigned_url(storage_url: str) -> str:
         return storage_url
 
     try:
-        from minio import Minio
         from datetime import timedelta
+
+        from minio import Minio
 
         client = Minio(
             settings.MINIO_ENDPOINT,
@@ -44,9 +45,7 @@ def _presigned_url(storage_url: str) -> str:
             bucket = settings.MINIO_BUCKET_ASSETS
             object_key = path
 
-        return client.presigned_get_object(
-            bucket, object_key, expires=timedelta(seconds=900)
-        )
+        return client.presigned_get_object(bucket, object_key, expires=timedelta(seconds=900))
     except Exception:
         return storage_url
 
@@ -95,6 +94,7 @@ async def get_asset(
     asset = result.scalar_one_or_none()
     if not asset:
         from app.core.exceptions import NotFound
+
         raise NotFound("Asset")
     return {
         "data": {
@@ -119,6 +119,7 @@ async def download_asset(
     asset = result.scalar_one_or_none()
     if not asset:
         from app.core.exceptions import NotFound
+
         raise NotFound("Asset")
 
     url = _presigned_url(asset.storage_url)

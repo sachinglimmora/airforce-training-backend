@@ -27,7 +27,9 @@ class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def login(self, email: str, password: str, user_agent: str | None, ip: str | None) -> TokenResponse:
+    async def login(
+        self, email: str, password: str, user_agent: str | None, ip: str | None
+    ) -> TokenResponse:
         result = await self.db.execute(
             select(User).where(User.email == email.lower(), User.deleted_at.is_(None))
         )
@@ -71,7 +73,9 @@ class AuthService:
 
         new_access = create_access_token(str(user.id), user.roles)
         new_refresh_raw = generate_refresh_token()
-        await self._store_refresh_token(user.id, new_refresh_raw, token_obj.user_agent, token_obj.ip_address)
+        await self._store_refresh_token(
+            user.id, new_refresh_raw, token_obj.user_agent, token_obj.ip_address
+        )
 
         return self._build_token_response(new_access, new_refresh_raw, user)
 
@@ -91,6 +95,7 @@ class AuthService:
         """Store the jti in Redis until the access-token TTL expires."""
         try:
             from app.redis_client import get_redis
+
             redis = get_redis()
             await redis.setex(f"jti_blacklist:{jti}", settings.JWT_ACCESS_TTL_SECONDS, "1")
         except Exception:

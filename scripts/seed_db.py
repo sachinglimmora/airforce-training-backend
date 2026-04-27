@@ -2,22 +2,22 @@
 
 Run with: python -m scripts.seed_db
 """
+
 import asyncio
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Force load .env from current directory
 load_dotenv()
 
 from app.config import get_settings
 from app.core.security import hash_password
-from app.modules.auth.models import Permission, Role, RolePermission, User, UserRole
+from app.modules.auth.models import Role, User, UserRole
 from app.modules.content.models import Aircraft
 
 settings = get_settings()
@@ -50,7 +50,10 @@ async def seed():
             role_map: dict[str, Role] = {}
             for name, description in ROLES:
                 from sqlalchemy import select
-                existing = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+
+                existing = (
+                    await db.execute(select(Role).where(Role.name == name))
+                ).scalar_one_or_none()
                 if not existing:
                     role = Role(name=name, description=description)
                     db.add(role)
@@ -62,13 +65,25 @@ async def seed():
             # Aircraft
             for type_code, manufacturer, display_name in AIRCRAFT:
                 from sqlalchemy import select
-                existing = (await db.execute(select(Aircraft).where(Aircraft.type_code == type_code))).scalar_one_or_none()
+
+                existing = (
+                    await db.execute(select(Aircraft).where(Aircraft.type_code == type_code))
+                ).scalar_one_or_none()
                 if not existing:
-                    db.add(Aircraft(type_code=type_code, manufacturer=manufacturer, display_name=display_name))
+                    db.add(
+                        Aircraft(
+                            type_code=type_code,
+                            manufacturer=manufacturer,
+                            display_name=display_name,
+                        )
+                    )
 
             # Admin user
             from sqlalchemy import select
-            existing_admin = (await db.execute(select(User).where(User.email == ADMIN_EMAIL))).scalar_one_or_none()
+
+            existing_admin = (
+                await db.execute(select(User).where(User.email == ADMIN_EMAIL))
+            ).scalar_one_or_none()
             if not existing_admin:
                 admin = User(
                     email=ADMIN_EMAIL,

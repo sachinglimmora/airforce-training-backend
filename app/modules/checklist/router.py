@@ -39,7 +39,9 @@ class ItemActionRequest(BaseModel):
 )
 async def list_checklists(
     aircraft_id: str | None = Query(None, description="Filter by aircraft UUID"),
-    phase: str | None = Query(None, description="pre-flight | takeoff | cruise | approach | landing | shutdown"),
+    phase: str | None = Query(
+        None, description="pre-flight | takeoff | cruise | approach | landing | shutdown"
+    ),
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
@@ -73,6 +75,7 @@ async def get_checklist(
     cl = result.scalar_one_or_none()
     if not cl:
         from app.core.exceptions import NotFound
+
         raise NotFound("Checklist")
     return {
         "data": {
@@ -197,7 +200,7 @@ async def call_item(
     description=(
         "Records the response to a previously called item. "
         "In `challenge_response` mode this is the Pilot Flying reading the response aloud.\n\n"
-        "Body: `{ \"response\": \"SET\" }` — the actual response text spoken by the trainee."
+        'Body: `{ "response": "SET" }` — the actual response text spoken by the trainee.'
     ),
     responses={**_401},
     operation_id="checklists_respond_item",
@@ -218,7 +221,14 @@ async def respond_item(
     )
     db.add(event)
     await db.commit()
-    return {"data": {"session_id": session_id, "item_id": item_id, "response": body.response, "status": "responded"}}
+    return {
+        "data": {
+            "session_id": session_id,
+            "item_id": item_id,
+            "response": body.response,
+            "status": "responded",
+        }
+    }
 
 
 @router.post(
@@ -240,12 +250,14 @@ async def complete_session(
 ):
     import json
     from datetime import UTC, datetime
+
     from app.modules.analytics.models import SessionEvent
 
     result = await db.execute(select(ChecklistSession).where(ChecklistSession.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
         from app.core.exceptions import NotFound
+
         raise NotFound("Checklist session")
 
     # Load the checklist to know total items and which are critical
@@ -301,8 +313,10 @@ async def get_session(
     session = result.scalar_one_or_none()
     if not session:
         from app.core.exceptions import NotFound
+
         raise NotFound("Checklist session")
     import json
+
     return {
         "data": {
             "session_id": str(session.id),

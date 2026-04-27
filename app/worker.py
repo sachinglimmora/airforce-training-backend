@@ -1,4 +1,5 @@
 from celery import Celery
+
 from app.config import get_settings
 
 settings = get_settings()
@@ -22,18 +23,20 @@ celery_app.conf.update(
 def parse_document(source_id: str, source_type: str, minio_object_key: str):
     """Download document from MinIO then parse and index its sections."""
     import asyncio
-    import io
+
     import structlog
-    from app.database import AsyncSessionLocal
-    from app.modules.content.models import ContentSource, ContentSection, ContentReference
-    from app.modules.content.parsers.factory import ParserFactory
     from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.modules.content.models import ContentReference, ContentSection, ContentSource
+    from app.modules.content.parsers.factory import ParserFactory
 
     log = structlog.get_logger()
     log.info("parse_document_started", source_id=source_id, source_type=source_type)
 
     def _download_from_minio() -> bytes:
         from minio import Minio
+
         client = Minio(
             settings.MINIO_ENDPOINT,
             access_key=settings.MINIO_ACCESS_KEY,
@@ -78,9 +81,7 @@ def parse_document(source_id: str, source_type: str, minio_object_key: str):
 
                         safe_section_num = (ps.section_number or str(ps.ordinal)).replace("/", "-")
                         citation_key = (
-                            f"{source.source_type.upper()}"
-                            f"-{source.version}"
-                            f"-{safe_section_num}"
+                            f"{source.source_type.upper()}-{source.version}-{safe_section_num}"
                         )
                         ref = ContentReference(
                             source_id=source.id,
@@ -107,13 +108,15 @@ def parse_document(source_id: str, source_type: str, minio_object_key: str):
                         def _collect(parsed_sections):
                             for ps in parsed_sections:
                                 safe_num = (ps.section_number or str(ps.ordinal)).replace(".", "_")
-                                documents.append({
-                                    "id": f"{source_id}_{safe_num}",
-                                    "source_id": source_id,
-                                    "section_number": ps.section_number,
-                                    "title": ps.title,
-                                    "content": ps.content_markdown,
-                                })
+                                documents.append(
+                                    {
+                                        "id": f"{source_id}_{safe_num}",
+                                        "source_id": source_id,
+                                        "section_number": ps.section_number,
+                                        "title": ps.title,
+                                        "content": ps.content_markdown,
+                                    }
+                                )
                                 if ps.children:
                                     _collect(ps.children)
 

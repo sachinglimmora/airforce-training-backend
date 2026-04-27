@@ -42,9 +42,24 @@ async def get_dashboard(
             "totalInstructors": 15,
             "recentAuditLogs": [],
             "systemStatus": [
-                {"service": "API",      "status": "operational", "uptime": "99.9%", "lastChecked": datetime.now(UTC).isoformat()},
-                {"service": "Database", "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
-                {"service": "Redis",    "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
+                {
+                    "service": "API",
+                    "status": "operational",
+                    "uptime": "99.9%",
+                    "lastChecked": datetime.now(UTC).isoformat(),
+                },
+                {
+                    "service": "Database",
+                    "status": "operational",
+                    "uptime": "100%",
+                    "lastChecked": datetime.now(UTC).isoformat(),
+                },
+                {
+                    "service": "Redis",
+                    "status": "operational",
+                    "uptime": "100%",
+                    "lastChecked": datetime.now(UTC).isoformat(),
+                },
             ],
             "charts": {
                 "trainingCompletion": [],
@@ -70,7 +85,11 @@ async def get_roles(
 ):
     result = await db.execute(select(Role))
     roles = result.scalars().all()
-    return {"data": [{"id": str(r.id), "name": r.name, "userCount": 0, "permissions": []} for r in roles]}
+    return {
+        "data": [
+            {"id": str(r.id), "name": r.name, "userCount": 0, "permissions": []} for r in roles
+        ]
+    }
 
 
 @router.post(
@@ -80,7 +99,7 @@ async def get_roles(
     description=(
         "Creates a custom role. After creation, assign permissions via "
         "`POST /users/{id}/roles`.\n\n"
-        "Body: `{ \"name\": \"safety_officer\", \"description\": \"...\" }`"
+        'Body: `{ "name": "safety_officer", "description": "..." }`'
     ),
     responses={**_401, **_403, 409: {"description": "Role name already exists"}},
     operation_id="admin_roles_create",
@@ -156,11 +175,36 @@ async def get_system_status(
 ):
     return {
         "data": [
-            {"service": "API",         "status": "operational", "uptime": "99.9%", "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "Database",    "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "Redis",       "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "Meilisearch", "status": "operational", "uptime": "99.8%", "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "MinIO",       "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
+            {
+                "service": "API",
+                "status": "operational",
+                "uptime": "99.9%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "Database",
+                "status": "operational",
+                "uptime": "100%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "Redis",
+                "status": "operational",
+                "uptime": "100%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "Meilisearch",
+                "status": "operational",
+                "uptime": "99.8%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "MinIO",
+                "status": "operational",
+                "uptime": "100%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
         ]
     }
 

@@ -41,7 +41,9 @@ class BranchRequest(BaseModel):
 async def list_procedures(
     aircraft_id: str | None = Query(None, description="Filter by aircraft UUID"),
     procedure_type: str | None = Query(None, description="normal | abnormal | emergency"),
-    phase: str | None = Query(None, description="pre-flight | taxi | takeoff | cruise | approach | landing | shutdown"),
+    phase: str | None = Query(
+        None, description="pre-flight | taxi | takeoff | cruise | approach | landing | shutdown"
+    ),
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
@@ -82,6 +84,7 @@ async def get_procedure(
     proc = result.scalar_one_or_none()
     if not proc:
         from app.core.exceptions import NotFound
+
         raise NotFound("Procedure")
     return {
         "data": {
@@ -113,7 +116,7 @@ async def get_procedure(
     description=(
         "Returns the procedure as a directed acyclic graph for frontend rendering. "
         "Each step includes a `branches` array — non-empty for emergency decision points.\n\n"
-        "Branch structure: `{ \"condition\": \"fire persists\", \"next_step_id\": \"uuid\" }`\n\n"
+        'Branch structure: `{ "condition": "fire persists", "next_step_id": "uuid" }`\n\n'
         "Use `root_step_id` as the starting node and follow `branches` or `ordinal` to traverse."
     ),
     responses={**_401, **_404},
@@ -128,9 +131,12 @@ async def get_procedure_flow(
     proc = result.scalar_one_or_none()
     if not proc:
         from app.core.exceptions import NotFound
+
         raise NotFound("Procedure")
 
-    all_steps = await db.execute(select(ProcedureStep).where(ProcedureStep.procedure_id == procedure_id))
+    all_steps = await db.execute(
+        select(ProcedureStep).where(ProcedureStep.procedure_id == procedure_id)
+    )
     steps = {str(s.id): s for s in all_steps.scalars().all()}
     root_steps = [s for s in steps.values() if s.parent_step_id is None]
 
@@ -143,8 +149,7 @@ async def get_procedure_flow(
             "mode": step.mode,
             "is_critical": step.is_critical,
             "branches": [
-                {"condition": b.branch_condition, "next_step_id": str(b.id)}
-                for b in step.branches
+                {"condition": b.branch_condition, "next_step_id": str(b.id)} for b in step.branches
             ],
         }
 
@@ -192,7 +197,13 @@ async def start_session(
     await db.flush()
     await db.commit()
 
-    return {"data": {"session_id": str(ts.id), "status": "in_progress", "started_at": ts.started_at.isoformat()}}
+    return {
+        "data": {
+            "session_id": str(ts.id),
+            "status": "in_progress",
+            "started_at": ts.started_at.isoformat(),
+        }
+    }
 
 
 @router.post(
@@ -218,6 +229,7 @@ async def complete_step(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from app.modules.procedures.service import ProcedureService
+
     svc = ProcedureService(db)
     result = await svc.complete_step(
         session_id=session_id,

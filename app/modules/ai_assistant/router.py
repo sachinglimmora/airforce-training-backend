@@ -47,12 +47,12 @@ async def get_history(
     description=(
         "Sends a user message to the AI gateway and returns both the user message "
         "and the assistant reply.\n\n"
-        "Body: `{ \"content\": \"Explain the bleed air system.\" }`\n\n"
+        'Body: `{ "content": "Explain the bleed air system." }`\n\n'
         "Response shape:\n"
         "```json\n"
         "{\n"
-        "  \"userMessage\":      { \"id\": \"...\", \"role\": \"user\",      \"content\": \"...\", \"timestamp\": \"...\" },\n"
-        "  \"assistantMessage\": { \"id\": \"...\", \"role\": \"assistant\", \"content\": \"...\", \"timestamp\": \"...\", \"sources\": [] }\n"
+        '  "userMessage":      { "id": "...", "role": "user",      "content": "...", "timestamp": "..." },\n'
+        '  "assistantMessage": { "id": "...", "role": "assistant", "content": "...", "timestamp": "...", "sources": [] }\n'
         "}\n"
         "```\n\n"
         "Internally wraps `POST /ai/complete` — PII filter and rate limits apply."

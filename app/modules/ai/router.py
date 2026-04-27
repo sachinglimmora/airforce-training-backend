@@ -5,10 +5,10 @@ from fastapi.routing import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.modules.auth.deps import get_current_user
-from app.modules.auth.schemas import CurrentUser
 from app.modules.ai.schemas import CompletionRequest, EmbedRequest
 from app.modules.ai.service import AIService
+from app.modules.auth.deps import get_current_user
+from app.modules.auth.schemas import CurrentUser
 
 router = APIRouter()
 
@@ -104,11 +104,11 @@ async def provider_status(
         "Response shape:\n"
         "```json\n"
         "{\n"
-        "  \"total_requests\": 1240,\n"
-        "  \"total_cost_usd\": 4.21,\n"
-        "  \"by_provider\": [\n"
-        "    { \"provider\": \"gemini\", \"requests\": 980, \"prompt_tokens\": 420000,\n"
-        "      \"completion_tokens\": 180000, \"cost_usd\": 3.12, \"cache_hits\": 310 }\n"
+        '  "total_requests": 1240,\n'
+        '  "total_cost_usd": 4.21,\n'
+        '  "by_provider": [\n'
+        '    { "provider": "gemini", "requests": 980, "prompt_tokens": 420000,\n'
+        '      "completion_tokens": 180000, "cost_usd": 3.12, "cache_hits": 310 }\n'
         "  ]\n"
         "}\n"
         "```"
@@ -121,7 +121,9 @@ async def usage(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from decimal import Decimal
+
     from sqlalchemy import func, select
+
     from app.modules.ai.models import AIRequest
 
     rows = await db.execute(
@@ -141,17 +143,21 @@ async def usage(
         cost = float(row.cost_usd or 0)
         total_cost += Decimal(str(cost))
         total_requests += row.requests or 0
-        by_provider.append({
-            "provider": row.provider,
-            "requests": row.requests or 0,
-            "prompt_tokens": row.prompt_tokens or 0,
-            "completion_tokens": row.completion_tokens or 0,
-            "cost_usd": cost,
-            "cache_hits": row.cache_hits or 0,
-        })
+        by_provider.append(
+            {
+                "provider": row.provider,
+                "requests": row.requests or 0,
+                "prompt_tokens": row.prompt_tokens or 0,
+                "completion_tokens": row.completion_tokens or 0,
+                "cost_usd": cost,
+                "cache_hits": row.cache_hits or 0,
+            }
+        )
 
-    return {"data": {
-        "total_requests": total_requests,
-        "total_cost_usd": float(total_cost),
-        "by_provider": by_provider,
-    }}
+    return {
+        "data": {
+            "total_requests": total_requests,
+            "total_cost_usd": float(total_cost),
+            "by_provider": by_provider,
+        }
+    }

@@ -54,8 +54,7 @@ async def list_competencies(
     comps = result.scalars().all()
     return {
         "data": [
-            {"id": str(c.id), "code": c.code, "name": c.name, "category": c.category}
-            for c in comps
+            {"id": str(c.id), "code": c.code, "name": c.name, "category": c.category} for c in comps
         ]
     }
 
@@ -78,6 +77,7 @@ async def trainee_competencies(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from app.modules.competency.models import CompetencyEvidence
+
     result = await db.execute(
         select(CompetencyEvidence).where(CompetencyEvidence.trainee_id == trainee_id)
     )
@@ -108,7 +108,11 @@ async def list_rubrics(
 ):
     result = await db.execute(select(Rubric))
     rubrics = result.scalars().all()
-    return {"data": [{"id": str(r.id), "name": r.name, "max_score": float(r.max_score)} for r in rubrics]}
+    return {
+        "data": [
+            {"id": str(r.id), "name": r.name, "max_score": float(r.max_score)} for r in rubrics
+        ]
+    }
 
 
 @router.post(
@@ -122,8 +126,8 @@ async def list_rubrics(
         "Criteria format:\n"
         "```json\n"
         "{\n"
-        "  \"procedural_compliance\": { \"weight\": 0.40, \"max\": 10 },\n"
-        "  \"crm\":                   { \"weight\": 0.15, \"max\": 10 }\n"
+        '  "procedural_compliance": { "weight": 0.40, "max": 10 },\n'
+        '  "crm":                   { "weight": 0.15, "max": 10 }\n'
         "}\n"
         "```\n\n"
         "**Required permission:** `rubric:create`"
@@ -165,8 +169,16 @@ async def get_rubric(
     r = result.scalar_one_or_none()
     if not r:
         from app.core.exceptions import NotFound
+
         raise NotFound("Rubric")
-    return {"data": {"id": str(r.id), "name": r.name, "criteria": r.criteria, "max_score": float(r.max_score)}}
+    return {
+        "data": {
+            "id": str(r.id),
+            "name": r.name,
+            "criteria": r.criteria,
+            "max_score": float(r.max_score),
+        }
+    }
 
 
 @router.post(
@@ -230,6 +242,7 @@ async def get_evaluation(
     ev = result.scalar_one_or_none()
     if not ev:
         from app.core.exceptions import NotFound
+
         raise NotFound("Evaluation")
     return {
         "data": {
@@ -266,6 +279,7 @@ async def update_evaluation(
     ev = result.scalar_one_or_none()
     if not ev:
         from app.core.exceptions import NotFound
+
         raise NotFound("Evaluation")
     if "comments" in body:
         ev.comments = body["comments"]

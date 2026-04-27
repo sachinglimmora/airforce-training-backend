@@ -33,7 +33,12 @@ class ContentService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_sources(self, source_type: str | None = None, aircraft_id: str | None = None, status: str | None = None) -> list[ContentSource]:
+    async def list_sources(
+        self,
+        source_type: str | None = None,
+        aircraft_id: str | None = None,
+        status: str | None = None,
+    ) -> list[ContentSource]:
         q = select(ContentSource)
         if source_type:
             q = q.where(ContentSource.source_type == source_type)
@@ -51,7 +56,9 @@ class ContentService:
             raise NotFound("Content source")
         return src
 
-    async def create_source(self, data, file_bytes: bytes, uploader_id: str) -> tuple[ContentSource, str]:  # noqa: ARG002
+    async def create_source(
+        self, data, file_bytes: bytes, uploader_id: str
+    ) -> tuple[ContentSource, str]:  # noqa: ARG002
         import asyncio
 
         checksum = hashlib.sha256(file_bytes).hexdigest()
@@ -76,6 +83,7 @@ class ContentService:
             source.original_file_url = f"{_settings.MINIO_BUCKET_CONTENT}/{object_key}"
 
             from app.worker import parse_document
+
             parse_document.delay(str(source.id), data.source_type, object_key)
             log.info("content_ingestion_queued", source_id=str(source.id), job_id=job_id)
         else:
@@ -89,6 +97,7 @@ class ContentService:
 
     async def approve_source(self, source_id: str, approver_id: str) -> ContentSource:
         from datetime import UTC, datetime
+
         source = await self.get_source(source_id)
         source.approved_by = approver_id
         source.approved_at = datetime.now(UTC)
@@ -105,7 +114,9 @@ class ContentService:
         return source
 
     async def get_section(self, section_id: str) -> ContentSection:
-        result = await self.db.execute(select(ContentSection).where(ContentSection.id == section_id))
+        result = await self.db.execute(
+            select(ContentSection).where(ContentSection.id == section_id)
+        )
         sec = result.scalar_one_or_none()
         if not sec:
             raise NotFound("Content section")
@@ -122,7 +133,9 @@ class ContentService:
 
     async def search(self, q: str, limit: int = 20) -> list[dict]:
         from meilisearch_python_async import Client
+
         from app.config import get_settings
+
         settings = get_settings()
 
         async with Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY) as client:

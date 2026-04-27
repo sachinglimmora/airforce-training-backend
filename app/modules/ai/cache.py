@@ -10,9 +10,17 @@ log = structlog.get_logger()
 settings = get_settings()
 
 
-def _make_cache_key(provider: str, model: str, messages: list, temperature: float, citations: list) -> str:
+def _make_cache_key(
+    provider: str, model: str, messages: list, temperature: float, citations: list
+) -> str:
     payload = json.dumps(
-        {"provider": provider, "model": model, "messages": messages, "temperature": temperature, "citations": sorted(citations)},
+        {
+            "provider": provider,
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "citations": sorted(citations),
+        },
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()

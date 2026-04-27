@@ -29,6 +29,7 @@ async def get_current_user(
     if jti:
         try:
             from app.redis_client import get_redis
+
             redis = get_redis()
             if await redis.exists(f"jti_blacklist:{jti}"):
                 raise TokenInvalid()

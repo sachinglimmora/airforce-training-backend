@@ -31,6 +31,7 @@ def _extract_subject(request: Request) -> tuple[str, str]:
         token = auth[7:]
         try:
             import jwt as pyjwt
+
             # Decode without signature verification — we only need the claims for rate limiting.
             # Full verification happens in get_current_user dep.
             payload = pyjwt.decode(token, options={"verify_signature": False})
@@ -79,6 +80,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         limit = _LIMITS.get(role, _LIMITS["anonymous"])
 
         from app.redis_client import get_redis
+
         redis = get_redis()
         allowed, count = await _check_rate_limit(redis, subject_key, limit)
 

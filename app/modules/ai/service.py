@@ -5,14 +5,15 @@ from decimal import Decimal
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.exceptions import AllProvidersDown, CitationNotFound
 from app.modules.ai.cache import _make_cache_key, get_cached, set_cached
 from app.modules.ai.pii_filter import filter_messages
-from app.modules.ai.providers.base import CompletionRequest as ProviderCompletionReq, Message
+from app.modules.ai.providers.base import CompletionRequest as ProviderCompletionReq
+from app.modules.ai.providers.base import Message
 from app.modules.ai.providers.gemini import GeminiProvider
 from app.modules.ai.providers.openai import OpenAIProvider
 from app.modules.ai.schemas import CompletionRequest
-from app.config import get_settings
 
 log = structlog.get_logger()
 settings = get_settings()
@@ -32,13 +33,19 @@ class AIService:
         messages = [{"role": m.role, "content": m.content} for m in req.messages]
         if req.context_citations:
             citation_text = await self._resolve_citations(req.context_citations)
-            messages.insert(0, {"role": "system", "content": f"Reference material:\n{citation_text}"})
+            messages.insert(
+                0, {"role": "system", "content": f"Reference material:\n{citation_text}"}
+            )
 
         # PII filter
         messages = filter_messages(messages)
 
         cache_key = _make_cache_key(
-            req.provider_preference, "", [m["content"] for m in messages], req.temperature, req.context_citations
+            req.provider_preference,
+            "",
+            [m["content"] for m in messages],
+            req.temperature,
+            req.context_citations,
         )
 
         # Cache lookup (only for low-temperature deterministic requests)
@@ -57,7 +64,9 @@ class AIService:
             max_tokens=req.max_tokens,
         )
 
-        result, provider_name = await self._call_with_fallback(req.provider_preference, provider_req)
+        result, provider_name = await self._call_with_fallback(
+            req.provider_preference, provider_req
+        )
 
         response = {
             "response": result.text,
@@ -93,7 +102,11 @@ class AIService:
         return response
 
     async def embed(self, texts: list[str], model: str) -> dict:
-        result = await _gemini.embed(texts, model) if settings.GEMINI_API_KEY else await _openai.embed(texts, model)
+        result = (
+            await _gemini.embed(texts, model)
+            if settings.GEMINI_API_KEY
+            else await _openai.embed(texts, model)
+        )
         return {
             "embeddings": result.embeddings,
             "model": result.model,
@@ -164,6 +177,7 @@ class AIService:
 
     async def _resolve_citations(self, citation_keys: list[str]) -> str:
         from sqlalchemy import select
+
         from app.modules.content.models import ContentReference, ContentSection
 
         parts = []

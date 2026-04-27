@@ -5,20 +5,20 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.config import get_settings
-from app.database import Base
+import app.modules.analytics.models  # noqa: F401
+import app.modules.assets.models  # noqa: F401
+import app.modules.audit.models  # noqa: F401
 
 # Import all models so Alembic detects them
 import app.modules.auth.models  # noqa: F401
-import app.modules.content.models  # noqa: F401
 import app.modules.checklist.models  # noqa: F401
+import app.modules.competency.models  # noqa: F401
+import app.modules.content.models  # noqa: F401
 import app.modules.procedures.models  # noqa: F401
 import app.modules.scenarios.models  # noqa: F401
-import app.modules.analytics.models  # noqa: F401
-import app.modules.competency.models  # noqa: F401
 import app.modules.vr_telemetry.models  # noqa: F401
-import app.modules.audit.models  # noqa: F401
-import app.modules.assets.models  # noqa: F401
+from app.config import get_settings
+from app.database import Base
 
 config = context.config
 if config.config_file_name:

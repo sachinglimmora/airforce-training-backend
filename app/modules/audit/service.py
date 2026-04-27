@@ -1,6 +1,5 @@
 import hashlib
 import json
-from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -26,9 +25,7 @@ class AuditService:
         metadata: dict | None = None,
     ) -> AuditLog:
         # Fetch last entry to continue the hash chain
-        last_result = await self.db.execute(
-            select(AuditLog).order_by(AuditLog.id.desc()).limit(1)
-        )
+        last_result = await self.db.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(1))
         last = last_result.scalar_one_or_none()
         prev_hash = last.row_hash if last else None
 

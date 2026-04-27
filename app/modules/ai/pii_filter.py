@@ -2,9 +2,8 @@
 
 Policy is owned by Ira; this module enforces it.
 """
-import re
 
-from app.core.exceptions import PIIDetected
+import re
 
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 _PHONE_RE = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")

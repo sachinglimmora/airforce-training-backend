@@ -2,7 +2,10 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 from fastapi.routing import APIRouter
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import get_user_permissions
+from app.core.security import get_jwks
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import (
@@ -12,9 +15,6 @@ from app.modules.auth.schemas import (
     RefreshRequest,
 )
 from app.modules.auth.service import AuthService
-from app.core.permissions import get_user_permissions
-from app.core.security import get_jwks
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 

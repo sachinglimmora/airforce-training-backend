@@ -30,6 +30,7 @@ class ActionRequest(BaseModel):
 
 from sqlalchemy.orm import selectinload
 
+
 @router.get(
     "",
     response_model=dict,
@@ -54,7 +55,7 @@ async def list_scenarios(
 ):
     result = await db.execute(select(Scenario).options(selectinload(Scenario.aircraft)))
     scenarios = result.scalars().all()
-    
+
     # Mapping for frontend compatibility
     data = []
     for s in scenarios:
@@ -65,24 +66,26 @@ async def list_scenarios(
         elif s.scenario_type in ["v1_cut", "engine_fire"]:
             sim_type = "mission-rehearsal"
 
-        data.append({
-            "id": str(s.id),
-            "title": s.name,
-            "description": s.description or "No description provided.",
-            "type": sim_type,
-            "difficulty": "intermediate", # Default
-            "duration": "45 mins", # Default
-            "status": "available", # Default
-            "aircraft": s.aircraft.type_code if s.aircraft else "Unknown",
-            "briefing": s.description or "Mission briefing pending intelligence update.",
-            "objectives": [
-                "Maintain aircraft control",
-                "Execute prescribed QRH procedures",
-                "Coordinate with ATC",
-                "Successfully complete mission objectives"
-            ] # Default objectives to prevent crash
-        })
-    
+        data.append(
+            {
+                "id": str(s.id),
+                "title": s.name,
+                "description": s.description or "No description provided.",
+                "type": sim_type,
+                "difficulty": "intermediate",  # Default
+                "duration": "45 mins",  # Default
+                "status": "available",  # Default
+                "aircraft": s.aircraft.type_code if s.aircraft else "Unknown",
+                "briefing": s.description or "Mission briefing pending intelligence update.",
+                "objectives": [
+                    "Maintain aircraft control",
+                    "Execute prescribed QRH procedures",
+                    "Coordinate with ATC",
+                    "Successfully complete mission objectives",
+                ],  # Default objectives to prevent crash
+            }
+        )
+
     return {"data": data}
 
 
@@ -111,15 +114,14 @@ async def get_scenario(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
-        select(Scenario)
-        .options(selectinload(Scenario.aircraft))
-        .where(Scenario.id == scenario_id)
+        select(Scenario).options(selectinload(Scenario.aircraft)).where(Scenario.id == scenario_id)
     )
     s = result.scalar_one_or_none()
     if not s:
         from app.core.exceptions import NotFound
+
         raise NotFound("Scenario")
-    
+
     # Map backend types to frontend simulation types
     sim_type = "flight-readiness"
     if s.scenario_type == "custom":
@@ -142,7 +144,7 @@ async def get_scenario(
                 "Maintain aircraft control",
                 "Execute prescribed QRH procedures",
                 "Coordinate with ATC",
-                "Successfully complete mission objectives"
+                "Successfully complete mission objectives",
             ],
             "initial_conditions": s.initial_conditions,
             "trigger_config": s.trigger_config,
@@ -199,7 +201,7 @@ async def start_session(
     description=(
         "Fires the configured trigger event for this session "
         "(e.g. engine failure at V1, windshear at 500 ft, TCAS RA).\n\n"
-        "Body: `{ \"event\": \"engine_failure_at_v1\", \"payload\": { ... } }`\n\n"
+        'Body: `{ "event": "engine_failure_at_v1", "payload": { ... } }`\n\n'
         "Records `trigger_fired_at` on the session."
     ),
     responses={**_401},
@@ -233,7 +235,7 @@ async def trigger_event(
     description=(
         "Records a discrete trainee action during a scenario session "
         "(e.g. moving a throttle, pressing a switch, declaring MAYDAY).\n\n"
-        "Body: `{ \"action\": \"throttle_idle_affected_engine\", \"payload\": { ... } }`"
+        'Body: `{ "action": "throttle_idle_affected_engine", "payload": { ... } }`'
     ),
     responses={**_401},
     operation_id="scenarios_action",
@@ -267,6 +269,7 @@ async def get_result(
     session = result.scalar_one_or_none()
     if not session:
         from app.core.exceptions import NotFound
+
         raise NotFound("Scenario session")
     return {"data": {"session_id": session_id, "result": session.result, "status": session.status}}
 
@@ -288,7 +291,10 @@ async def complete_simulation(
 
     result = await db.execute(
         select(ScenarioSession)
-        .where(ScenarioSession.scenario_id == scenario_id, ScenarioSession.trainee_id == current_user.id)
+        .where(
+            ScenarioSession.scenario_id == scenario_id,
+            ScenarioSession.trainee_id == current_user.id,
+        )
         .order_by(ScenarioSession.started_at.desc())
         .limit(1)
     )

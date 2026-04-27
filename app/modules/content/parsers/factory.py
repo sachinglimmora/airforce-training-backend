@@ -1,20 +1,17 @@
 import io
 import re
-from typing import Type
 
 from app.modules.content.parsers.base import BaseParser, ParsedSection
-
 
 # ---------------------------------------------------------------------------
 # PDF parser (pypdf)
 # ---------------------------------------------------------------------------
 
+
 class PDFParser(BaseParser):
     """Extract sections from a PDF by splitting on heading-like lines."""
 
-    _HEADING_RE = re.compile(
-        r"^(?P<num>(?:\d+\.)+\d*)\s+(?P<title>.+)$"
-    )
+    _HEADING_RE = re.compile(r"^(?P<num>(?:\d+\.)+\d*)\s+(?P<title>.+)$")
 
     def parse(self, file_bytes: bytes) -> list[ParsedSection]:
         from pypdf import PdfReader
@@ -67,9 +64,7 @@ class PDFParser(BaseParser):
 
         if not sections:
             # Fallback: single section with all text
-            full_text = "\n".join(
-                (page.extract_text() or "") for page in reader.pages
-            )
+            full_text = "\n".join((page.extract_text() or "") for page in reader.pages)
             sections.append(
                 ParsedSection(
                     section_number="1",
@@ -86,6 +81,7 @@ class PDFParser(BaseParser):
 # ---------------------------------------------------------------------------
 # DOCX parser (python-docx)
 # ---------------------------------------------------------------------------
+
 
 class DOCXParser(BaseParser):
     """Extract sections from a DOCX using Heading styles as section boundaries."""
@@ -155,11 +151,12 @@ class DOCXParser(BaseParser):
 # Factory registry
 # ---------------------------------------------------------------------------
 
+
 class ParserFactory:
-    _parsers: dict[str, Type[BaseParser]] = {}
+    _parsers: dict[str, type[BaseParser]] = {}
 
     @classmethod
-    def register(cls, source_type: str, parser_cls: Type[BaseParser]) -> None:
+    def register(cls, source_type: str, parser_cls: type[BaseParser]) -> None:
         cls._parsers[source_type] = parser_cls
 
     @classmethod

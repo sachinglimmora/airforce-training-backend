@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.config import get_settings
 from app.modules.training.models import Course, TrainingModule
 
@@ -24,7 +25,7 @@ COURSES = [
         "status": "in-progress",
         "module_count": 3,
         "completed_modules": 1,
-        "progress": 33
+        "progress": 33,
     },
     {
         "id": uuid.uuid4(),
@@ -36,8 +37,8 @@ COURSES = [
         "status": "not-started",
         "module_count": 2,
         "completed_modules": 0,
-        "progress": 0
-    }
+        "progress": 0,
+    },
 ]
 
 MODULES = [
@@ -48,7 +49,7 @@ MODULES = [
         "category": "Jet Engine Systems",
         "duration": "45 mins",
         "order": 1,
-        "is_completed": True
+        "is_completed": True,
     },
     {
         "course_index": 0,
@@ -57,7 +58,7 @@ MODULES = [
         "category": "Jet Engine Systems",
         "duration": "1 hour",
         "order": 2,
-        "is_completed": False
+        "is_completed": False,
     },
     {
         "course_index": 1,
@@ -66,9 +67,10 @@ MODULES = [
         "category": "Avionics",
         "duration": "30 mins",
         "order": 1,
-        "is_completed": False
-    }
+        "is_completed": False,
+    },
 ]
+
 
 async def seed_training():
     async with AsyncSession_() as db:
@@ -79,17 +81,18 @@ async def seed_training():
                 course = Course(**c_data)
                 db.add(course)
                 course_objects.append(course)
-            
+
             await db.flush()
-            
+
             # Create Modules
             for m_data in MODULES:
                 c_idx = m_data.pop("course_index")
                 course_id = course_objects[c_idx].id
                 module = TrainingModule(course_id=course_id, **m_data)
                 db.add(module)
-    
+
     print("Training data seeded.")
+
 
 if __name__ == "__main__":
     asyncio.run(seed_training())

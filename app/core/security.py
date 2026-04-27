@@ -23,6 +23,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 _ephemeral_store: dict[str, str] = {}
 
 import threading
+
 _key_lock = threading.Lock()
 
 
@@ -39,6 +40,7 @@ def _load_private_key() -> str:
             return _ephemeral_store["private"]
 
         import warnings
+
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -54,10 +56,14 @@ def _load_private_key() -> str:
             serialization.PrivateFormat.TraditionalOpenSSL,
             serialization.NoEncryption(),
         ).decode()
-        pub_pem = private_key.public_key().public_bytes(
-            serialization.Encoding.PEM,
-            serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        pub_pem = (
+            private_key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
 
         # Persist to the configured paths so all workers share the same key pair
         try:
@@ -113,13 +119,17 @@ def hash_token(token: str) -> str:
 
 
 def get_jwks() -> dict:
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.serialization import load_pem_public_key
     import base64
+
+    from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
     pub_pem = _load_public_key().encode()
     pub_key = load_pem_public_key(pub_pem)
-    pub_numbers = pub_key.public_key().public_numbers() if hasattr(pub_key, "public_key") else pub_key.public_numbers()
+    pub_numbers = (
+        pub_key.public_key().public_numbers()
+        if hasattr(pub_key, "public_key")
+        else pub_key.public_numbers()
+    )
 
     def int_to_base64url(n: int) -> str:
         length = (n.bit_length() + 7) // 8

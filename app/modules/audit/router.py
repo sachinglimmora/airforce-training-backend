@@ -39,7 +39,9 @@ _404 = {404: {"description": "Audit entry not found"}}
 async def list_audit_logs(
     actor: str | None = Query(None, description="Filter by actor user UUID"),
     action: str | None = Query(None, description="Filter by action string e.g. auth.login"),
-    resource_type: str | None = Query(None, description="Filter by resource type e.g. users, content"),
+    resource_type: str | None = Query(
+        None, description="Filter by resource type e.g. users, content"
+    ),
     from_time: datetime | None = Query(None, description="Start of time range (RFC 3339)"),
     to_time: datetime | None = Query(None, description="End of time range (RFC 3339)"),
     limit: int = Query(50, le=200, description="Max results (max 200)"),
@@ -97,6 +99,7 @@ async def get_audit_log(
     entry = result.scalar_one_or_none()
     if not entry:
         from app.core.exceptions import NotFound
+
         raise NotFound("Audit log entry")
     return {
         "data": {
@@ -118,7 +121,7 @@ async def get_audit_log(
     description=(
         "Recomputes the SHA-256 hash chain from the first entry to the last and "
         "returns whether it is intact.\n\n"
-        "Response: `{ \"total_entries\": 1240, \"integrity\": \"ok\", \"broken_at_id\": null }`\n\n"
+        'Response: `{ "total_entries": 1240, "integrity": "ok", "broken_at_id": null }`\n\n'
         "If `integrity` is `compromised`, `broken_at_id` identifies the first tampered entry."
     ),
     responses={**_401, **_403},

@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
+
 
 class CourseBase(BaseModel):
     title: str
@@ -10,8 +12,10 @@ class CourseBase(BaseModel):
     difficulty: str | None = None
     thumbnail: str | None = None
 
+
 class CourseCreate(CourseBase):
     pass
+
 
 class CourseUpdate(BaseModel):
     title: str | None = None
@@ -22,6 +26,7 @@ class CourseUpdate(BaseModel):
     thumbnail: str | None = None
     status: str | None = None
 
+
 class CourseOut(CourseBase):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -31,6 +36,7 @@ class CourseOut(CourseBase):
     status: str
     created_at: datetime
     updated_at: datetime
+
 
 class ModuleBase(BaseModel):
     title: str
@@ -43,8 +49,10 @@ class ModuleBase(BaseModel):
     duration: str | None = None
     order: int = 0
 
+
 class ModuleCreate(ModuleBase):
     course_id: uuid.UUID
+
 
 class ModuleUpdate(BaseModel):
     title: str | None = None
@@ -57,6 +65,7 @@ class ModuleUpdate(BaseModel):
     duration: str | None = None
     order: int | None = None
     is_completed: bool | None = None
+
 
 class ModuleOut(ModuleBase):
     model_config = ConfigDict(from_attributes=True)
