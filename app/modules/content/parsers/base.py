@@ -8,7 +8,8 @@ class ParsedSection:
     title: str
     content_markdown: str
     page_number: int | None = None
-    children: list["ParsedSection"] = None
+    children: list["ParsedSection"] | None = None
+
     ordinal: int = 0
 
     def __post_init__(self):

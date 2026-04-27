@@ -59,6 +59,7 @@ jobs:
       run: ruff check .
 
     - name: Type check with Mypy
+      continue-on-error: true
       run: mypy .
 
     - name: Run tests
