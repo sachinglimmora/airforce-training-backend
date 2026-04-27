@@ -30,6 +30,7 @@ from app.modules.ai_assistant.router import router as ai_assistant_router
 from app.modules.alerts.router import router as alerts_router
 from app.modules.instructor_videos.router import router as instructor_videos_router
 from app.modules.admin.router import router as admin_router
+from app.modules.rag.router import router as rag_router
 
 log = structlog.get_logger()
 settings = get_settings()
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(digital_twin_router, prefix=f"{prefix}/digital-twin", tags=["digital-twin"])
     app.include_router(progress_router, prefix=f"{prefix}/progress", tags=["progress"])
     app.include_router(ai_assistant_router, prefix=f"{prefix}/ai-assistant", tags=["ai-assistant"])
+    app.include_router(rag_router, prefix=f"{prefix}/rag", tags=["rag"])
     app.include_router(alerts_router, prefix=f"{prefix}/alerts", tags=["alerts"])
     app.include_router(instructor_videos_router, prefix=f"{prefix}/instructor-videos", tags=["instructor-videos"])
     app.include_router(admin_router, prefix=f"{prefix}/admin", tags=["admin"])
