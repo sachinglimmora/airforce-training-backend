@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Request, Response
+from fastapi import Depends, Request
 from fastapi.routing import APIRouter
 
 from app.database import get_db
@@ -9,9 +9,7 @@ from app.modules.auth.schemas import (
     ChangePasswordRequest,
     CurrentUser,
     LoginRequest,
-    MeResponse,
     RefreshRequest,
-    TokenResponse,
 )
 from app.modules.auth.service import AuthService
 from app.core.permissions import get_user_permissions
@@ -84,9 +82,13 @@ async def refresh(body: RefreshRequest, db: Annotated[AsyncSession, Depends(get_
     responses={**_401},
     operation_id="auth_logout",
 )
-async def logout(body: RefreshRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+async def logout(
+    body: RefreshRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     svc = AuthService(db)
-    await svc.logout(body.refresh_token)
+    await svc.logout(body.refresh_token, access_jti=current_user.jti or None)
 
 
 @router.get(

@@ -19,11 +19,12 @@ celery_app.conf.update(
 
 
 @celery_app.task(name="content.parse_document")
-def parse_document(source_id: str, source_type: str, file_bytes: bytes):
-    """Parse an uploaded document and extract sections."""
+def parse_document(source_id: str, source_type: str, minio_object_key: str):
+    """Download document from MinIO then parse and index its sections."""
     import asyncio
+    import io
     import structlog
-    from app.database import async_session_factory
+    from app.database import AsyncSessionLocal
     from app.modules.content.models import ContentSource, ContentSection, ContentReference
     from app.modules.content.parsers.factory import ParserFactory
     from sqlalchemy import select
@@ -31,9 +32,24 @@ def parse_document(source_id: str, source_type: str, file_bytes: bytes):
     log = structlog.get_logger()
     log.info("parse_document_started", source_id=source_id, source_type=source_type)
 
+    def _download_from_minio() -> bytes:
+        from minio import Minio
+        client = Minio(
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=settings.MINIO_SECURE,
+        )
+        bucket = settings.MINIO_BUCKET_CONTENT
+        response = client.get_object(bucket, minio_object_key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
+
     async def _parse():
-        async with async_session_factory() as db:
-            # 1. Get source
+        async with AsyncSessionLocal() as db:
             result = await db.execute(select(ContentSource).where(ContentSource.id == source_id))
             source = result.scalar_one_or_none()
             if not source:
@@ -41,17 +57,17 @@ def parse_document(source_id: str, source_type: str, file_bytes: bytes):
                 return
 
             try:
-                # 2. Parse
+                file_bytes = _download_from_minio()
+
                 parser = ParserFactory.get_parser(source_type)
                 sections = parser.parse(file_bytes)
 
-                # 3. Save sections recursively
                 async def _save_sections(parsed_sections, parent_id=None):
                     for ps in parsed_sections:
                         sec = ContentSection(
                             source_id=source.id,
                             parent_section_id=parent_id,
-                            section_number=ps.section_number,
+                            section_number=ps.section_number or "0",
                             title=ps.title,
                             content_markdown=ps.content_markdown,
                             page_number=ps.page_number,
@@ -60,11 +76,16 @@ def parse_document(source_id: str, source_type: str, file_bytes: bytes):
                         db.add(sec)
                         await db.flush()
 
-                        # Create citation reference
+                        safe_section_num = (ps.section_number or str(ps.ordinal)).replace("/", "-")
+                        citation_key = (
+                            f"{source.source_type.upper()}"
+                            f"-{source.version}"
+                            f"-{safe_section_num}"
+                        )
                         ref = ContentReference(
                             source_id=source.id,
                             section_id=sec.id,
-                            citation_key=f"{source.source_type.upper()}-{source.version}-{ps.section_number}",
+                            citation_key=citation_key,
                             display_label=f"{source.source_type.upper()} §{ps.section_number} — {ps.title}",
                         )
                         db.add(ref)
@@ -75,32 +96,34 @@ def parse_document(source_id: str, source_type: str, file_bytes: bytes):
                 await _save_sections(sections)
                 await db.commit()
 
-                # 4. Index in Meilisearch
-                from meilisearch_python_async import Client
-                from app.config import get_settings
-                settings = get_settings()
+                # Index in Meilisearch
+                try:
+                    from meilisearch_python_async import Client
 
-                async with Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY) as client:
-                    index = client.index("content_sections")
-                    documents = []
-                    # Simple flattening for indexing
-                    def _collect_for_indexing(parsed_sections):
-                        for ps in parsed_sections:
-                            documents.append({
-                                "id": f"{source_id}_{ps.section_number.replace('.', '_')}",
-                                "source_id": source_id,
-                                "section_number": ps.section_number,
-                                "title": ps.title,
-                                "content": ps.content_markdown,
-                            })
-                            if ps.children:
-                                _collect_for_indexing(ps.children)
-                    
-                    _collect_for_indexing(sections)
-                    if documents:
-                        await index.add_documents(documents)
+                    async with Client(settings.MEILI_URL, settings.MEILI_MASTER_KEY) as client:
+                        index = client.index("content_sections")
+                        documents = []
 
-                log.info("parse_document_completed", source_id=source_id, sections_count=len(sections))
+                        def _collect(parsed_sections):
+                            for ps in parsed_sections:
+                                safe_num = (ps.section_number or str(ps.ordinal)).replace(".", "_")
+                                documents.append({
+                                    "id": f"{source_id}_{safe_num}",
+                                    "source_id": source_id,
+                                    "section_number": ps.section_number,
+                                    "title": ps.title,
+                                    "content": ps.content_markdown,
+                                })
+                                if ps.children:
+                                    _collect(ps.children)
+
+                        _collect(sections)
+                        if documents:
+                            await index.add_documents(documents)
+                except Exception as meili_err:
+                    log.warning("meilisearch_index_failed", error=str(meili_err))
+
+                log.info("parse_document_completed", source_id=source_id, sections=len(sections))
 
             except Exception as e:
                 log.error("parse_document_failed", source_id=source_id, error=str(e))

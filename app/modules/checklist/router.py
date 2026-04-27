@@ -238,14 +238,50 @@ async def complete_session(
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    import json
     from datetime import UTC, datetime
+    from app.modules.analytics.models import SessionEvent
 
     result = await db.execute(select(ChecklistSession).where(ChecklistSession.id == session_id))
     session = result.scalar_one_or_none()
-    if session:
-        session.status = "completed"
-        session.ended_at = datetime.now(UTC)
-    return {"data": {"session_id": session_id, "status": "completed"}}
+    if not session:
+        from app.core.exceptions import NotFound
+        raise NotFound("Checklist session")
+
+    # Load the checklist to know total items and which are critical
+    cl_result = await db.execute(select(Checklist).where(Checklist.id == session.checklist_id))
+    cl = cl_result.scalar_one_or_none()
+
+    events_result = await db.execute(
+        select(SessionEvent).where(SessionEvent.session_id == session_id)
+    )
+    events = events_result.scalars().all()
+
+    responded_ids = {
+        e.payload.get("item_id")
+        for e in events
+        if e.event_type == "checklist_item_responded" and e.payload.get("item_id")
+    }
+
+    total = len(cl.items) if cl else 0
+    critical_ids = {str(item.id) for item in cl.items if item.is_critical} if cl else set()
+    critical_missed = critical_ids - responded_ids
+    responded = len(responded_ids & {str(i.id) for i in cl.items}) if cl else 0
+    compliance_pct = round(responded / total * 100, 1) if total else 0.0
+
+    score = {
+        "total_items": total,
+        "responded": responded,
+        "compliance_pct": compliance_pct,
+        "critical_items": len(critical_ids),
+        "critical_missed": len(critical_missed),
+    }
+
+    session.status = "completed"
+    session.ended_at = datetime.now(UTC)
+    session.score_json = json.dumps(score)
+
+    return {"data": {"session_id": session_id, "status": "completed", "score": score}}
 
 
 @router.get(
@@ -266,11 +302,13 @@ async def get_session(
     if not session:
         from app.core.exceptions import NotFound
         raise NotFound("Checklist session")
+    import json
     return {
         "data": {
             "session_id": str(session.id),
             "status": session.status,
             "started_at": session.started_at.isoformat(),
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+            "score": json.loads(session.score_json) if session.score_json else None,
         }
     }

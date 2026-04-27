@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = ""
     MINIO_SECRET_KEY: str = ""
     MINIO_BUCKET_ASSETS: str = "aegis-assets"
+    MINIO_BUCKET_CONTENT: str = "aegis-content"
     MINIO_SECURE: bool = False
 
     # CORS

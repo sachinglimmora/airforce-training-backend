@@ -4,6 +4,7 @@ from fastapi import Depends, File, Form, Query, UploadFile
 from fastapi.routing import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import require_permission
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
@@ -46,6 +47,7 @@ async def list_sources(
     "/sources",
     status_code=202,
     response_model=dict,
+    dependencies=[require_permission("content", "create")],
     summary="Upload and parse a source document",
     description=(
         "Upload a PDF or DOCX document for async parsing. "
@@ -161,6 +163,7 @@ async def get_source_tree(
 @router.post(
     "/sources/{source_id}/approve",
     response_model=dict,
+    dependencies=[require_permission("content", "approve")],
     summary="Approve a content source for use",
     description=(
         "Marks the source as `approved`, making it visible to trainees and instructors. "
@@ -183,6 +186,7 @@ async def approve_source(
 @router.post(
     "/sources/{source_id}/archive",
     response_model=dict,
+    dependencies=[require_permission("content", "update")],
     summary="Archive a content source",
     description=(
         "Moves the source to `archived` status. Archived sources are hidden from normal reads "

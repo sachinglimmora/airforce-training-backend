@@ -75,7 +75,7 @@ class AuthService:
 
         return self._build_token_response(new_access, new_refresh_raw, user)
 
-    async def logout(self, refresh_token_raw: str) -> None:
+    async def logout(self, refresh_token_raw: str, access_jti: str | None = None) -> None:
         token_hash = hash_token(refresh_token_raw)
         result = await self.db.execute(
             select(RefreshToken).where(RefreshToken.token_hash == token_hash)
@@ -83,6 +83,18 @@ class AuthService:
         token_obj = result.scalar_one_or_none()
         if token_obj:
             token_obj.revoked_at = datetime.now(UTC)
+
+        if access_jti:
+            await self.blacklist_token(access_jti)
+
+    async def blacklist_token(self, jti: str) -> None:
+        """Store the jti in Redis until the access-token TTL expires."""
+        try:
+            from app.redis_client import get_redis
+            redis = get_redis()
+            await redis.setex(f"jti_blacklist:{jti}", settings.JWT_ACCESS_TTL_SECONDS, "1")
+        except Exception:
+            log.warning("jti_blacklist_failed", jti=jti)
 
     async def change_password(self, user_id: str, current_password: str, new_password: str) -> None:
         result = await self.db.execute(select(User).where(User.id == user_id))

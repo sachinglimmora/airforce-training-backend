@@ -6,13 +6,14 @@ from fastapi.routing import APIRouter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import require_admin
 from app.database import get_db
 from app.modules.audit.models import AuditLog
 from app.modules.audit.service import AuditService
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
 
-router = APIRouter()
+router = APIRouter(dependencies=[require_admin()])
 
 _401 = {401: {"description": "Not authenticated"}}
 _403 = {403: {"description": "Requires audit:read permission (admin only in Phase 1)"}}

@@ -1,14 +1,32 @@
 import hashlib
+import io
 import uuid
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.exceptions import NotFound
 from app.modules.content.models import ContentReference, ContentSection, ContentSource
 
 log = structlog.get_logger()
+_settings = get_settings()
+
+
+def _upload_to_minio_sync(file_bytes: bytes, object_key: str) -> None:
+    from minio import Minio
+
+    client = Minio(
+        _settings.MINIO_ENDPOINT,
+        access_key=_settings.MINIO_ACCESS_KEY,
+        secret_key=_settings.MINIO_SECRET_KEY,
+        secure=_settings.MINIO_SECURE,
+    )
+    bucket = _settings.MINIO_BUCKET_CONTENT
+    if not client.bucket_exists(bucket):
+        client.make_bucket(bucket)
+    client.put_object(bucket, object_key, io.BytesIO(file_bytes), len(file_bytes))
 
 
 class ContentService:
@@ -33,7 +51,9 @@ class ContentService:
             raise NotFound("Content source")
         return src
 
-    async def create_source(self, data, file_bytes: bytes, uploader_id: str) -> tuple[ContentSource, str]:
+    async def create_source(self, data, file_bytes: bytes, uploader_id: str) -> tuple[ContentSource, str]:  # noqa: ARG002
+        import asyncio
+
         checksum = hashlib.sha256(file_bytes).hexdigest()
         source = ContentSource(
             source_type=data.source_type,
@@ -47,12 +67,23 @@ class ContentService:
         self.db.add(source)
         await self.db.flush()
 
-        # Enqueue async parsing job
         job_id = f"job_{uuid.uuid4().hex[:12]}"
-        log.info("content_ingestion_queued", source_id=str(source.id), job_id=job_id)
-        
-        from app.worker import parse_document
-        parse_document.delay(str(source.id), data.source_type, file_bytes)
+
+        if _settings.MINIO_ACCESS_KEY and _settings.MINIO_SECRET_KEY:
+            object_key = f"content/{source.id}/{data.source_type}_{data.version}"
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _upload_to_minio_sync, file_bytes, object_key)
+            source.original_file_url = f"{_settings.MINIO_BUCKET_CONTENT}/{object_key}"
+
+            from app.worker import parse_document
+            parse_document.delay(str(source.id), data.source_type, object_key)
+            log.info("content_ingestion_queued", source_id=str(source.id), job_id=job_id)
+        else:
+            log.warning(
+                "minio_not_configured_parse_skipped",
+                source_id=str(source.id),
+                hint="Set MINIO_ACCESS_KEY and MINIO_SECRET_KEY to enable document parsing",
+            )
 
         return source, job_id
 

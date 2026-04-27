@@ -1,7 +1,7 @@
+import re
 import uuid
-from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -16,6 +16,22 @@ class RefreshRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=12)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_policy(cls, v: str) -> str:
+        errors = []
+        if not re.search(r"[A-Z]", v):
+            errors.append("one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            errors.append("one lowercase letter")
+        if not re.search(r"\d", v):
+            errors.append("one digit")
+        if not re.search(r"[!@#$%^&*()\-_=+\[\]{}|;:',.<>?/`~\"\\]", v):
+            errors.append("one special character")
+        if errors:
+            raise ValueError(f"Password must contain at least: {', '.join(errors)}")
+        return v
 
 
 class UserOut(BaseModel):
@@ -44,5 +60,6 @@ class MeResponse(BaseModel):
 class CurrentUser(BaseModel):
     id: str
     roles: list[str]
+    jti: str = ""
 
     model_config = {"from_attributes": True}
