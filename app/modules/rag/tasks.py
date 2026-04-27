@@ -124,9 +124,24 @@ def reembed_source(source_id: str) -> int:
     return asyncio.run(_reembed_source_async(source_id))
 
 
+async def _reembed_all_dim_mismatch_async() -> int:
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(ContentChunk.source_id)
+            .where(ContentChunk.embedding_dim != _settings.EMBEDDING_DIM)
+            .distinct()
+        )).scalars().all()
+    count = 0
+    for source_id in rows:
+        reembed_source.delay(str(source_id))
+        count += 1
+    log.info("reembed_all_dim_mismatch_enqueued", count=count)
+    return count
+
+
 @celery_app.task(name="rag.reembed_all_dim_mismatch")
 def reembed_all_dim_mismatch() -> int:
-    raise NotImplementedError
+    return asyncio.run(_reembed_all_dim_mismatch_async())
 
 
 @celery_app.task(name="rag.auto_close_idle_sessions")
