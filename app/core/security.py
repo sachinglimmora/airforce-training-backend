@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -22,7 +23,6 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 _ephemeral_store: dict[str, str] = {}
 
-import threading
 
 _key_lock = threading.Lock()
 

@@ -2,16 +2,18 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TraineeOverview(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
-    readinessScore: float = 0.0
+    readiness_score: float = Field(0.0, alias="readinessScore")
     progress: float = 0.0
-    simulationHours: float = 0.0
+    simulation_hours: float = Field(0.0, alias="simulationHours")
+
+
     status: str = "active"
 
     model_config = ConfigDict(from_attributes=True)

@@ -87,7 +87,7 @@ async def get_roles(
     roles = result.scalars().all()
     return {
         "data": [
-            {"id": str(r.id), "name": r.name, "userCount": 0, "permissions": []} for r in roles
+            {"id": str(role.id), "name": role.name, "userCount": 0, "permissions": []} for role in roles
         ]
     }
 
@@ -131,7 +131,7 @@ async def create_role(
 async def get_audit_logs(
     db: Annotated[AsyncSession, Depends(get_db)],
     _module: str | None = Query(None, description="Filter by resource_type e.g. users, content"),
-    _userId: str | None = Query(None, description="Filter by actor user UUID"),
+    user_id: str | None = Query(None, alias="userId", description="Filter by actor user UUID"),
     limit: int = Query(50, description="Page size"),
     offset: int = Query(0, description="Page offset"),
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
@@ -144,15 +144,15 @@ async def get_audit_logs(
             "total": 100,
             "logs": [
                 {
-                    "id": str(l.id),
-                    "userId": str(l.actor_user_id),
-                    "action": l.action,
-                    "module": l.resource_type,
-                    "details": str(l.metadata_json),
-                    "timestamp": l.timestamp.isoformat(),
-                    "ipAddress": str(l.actor_ip),
+                    "id": str(log.id),
+                    "userId": str(log.actor_user_id),
+                    "action": log.action,
+                    "module": log.resource_type,
+                    "details": str(log.metadata_json),
+                    "timestamp": log.timestamp.isoformat(),
+                    "ipAddress": str(log.actor_ip),
                 }
-                for l in logs
+                for log in logs
             ],
         }
     }

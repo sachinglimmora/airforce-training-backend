@@ -1,5 +1,10 @@
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.modules.content.models import Aircraft
+
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -7,10 +12,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
-_now = lambda: datetime.now(UTC)
+
+def _now():
+    return datetime.now(UTC)
 
 
 class Scenario(Base):
+
     __tablename__ = "scenarios"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

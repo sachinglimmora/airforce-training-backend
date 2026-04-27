@@ -14,21 +14,21 @@ from app.database import Base
 def import_models():
     try:
         from app.modules.auth.models import (
-            User,
-            Role,
             Permission,
-            RolePermission,
-            UserRole,
             RefreshToken,
+            Role,
+            RolePermission,
+            User,
+            UserRole,
         )
     except ImportError:
         pass
     try:
         from app.modules.content.models import (
             Aircraft,
-            ContentSource,
-            ContentSection,
             ContentReference,
+            ContentSection,
+            ContentSource,
         )
     except ImportError:
         pass
@@ -42,15 +42,15 @@ def import_models():
         pass
     try:
         from app.modules.procedures.models import (
-            Procedure,
-            ProcedureStep,
-            ProcedureSession,
             Deviation,
+            Procedure,
+            ProcedureSession,
+            ProcedureStep,
         )
     except ImportError:
         pass
     try:
-        from app.modules.analytics.models import TrainingSession, SessionEvent
+        from app.modules.analytics.models import SessionEvent, TrainingSession
     except ImportError:
         pass
 

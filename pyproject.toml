@@ -56,6 +56,9 @@ line-length = 100
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402", "F401"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = false

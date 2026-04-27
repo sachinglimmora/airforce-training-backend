@@ -1,1 +1,2 @@
-from app.modules.training.router import router
+from app.modules.training.router import router as router
+

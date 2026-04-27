@@ -1,1 +1,2 @@
-from app.modules.instructor.router import router
+from app.modules.instructor.router import router as router
+

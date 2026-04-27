@@ -48,12 +48,12 @@ async def get_course(
 @router.get("/modules", response_model=dict)
 async def list_modules(
     db: Annotated[AsyncSession, Depends(get_db)],
-    courseId: uuid.UUID | None = Query(None),
+    course_id: uuid.UUID | None = Query(None, alias="courseId"),
     current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
 ):
     q = select(TrainingModule)
-    if courseId:
-        q = q.where(TrainingModule.course_id == courseId)
+    if course_id:
+        q = q.where(TrainingModule.course_id == course_id)
     result = await db.execute(q)
     modules = result.scalars().all()
     return {"data": [ModuleOut.model_validate(m).model_dump() for m in modules]}
