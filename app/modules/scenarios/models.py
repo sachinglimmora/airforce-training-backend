@@ -20,6 +20,7 @@ class Scenario(Base):
         Enum("v1_cut", "windshear", "tcas_ra", "engine_fire", "custom", name="scenario_type"), nullable=False
     )
     aircraft_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("aircraft.id"), nullable=True)
+    aircraft: Mapped["Aircraft"] = relationship("Aircraft")
     initial_conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     trigger_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     procedure_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("procedures.id"), nullable=True)

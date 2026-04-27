@@ -69,7 +69,7 @@ async def get_roles(
 ):
     result = await db.execute(select(Role))
     roles = result.scalars().all()
-    return {"data": [{"id": str(r.id), "name": r.name, "userCount": 0} for r in roles]}
+    return {"data": [{"id": str(r.id), "name": r.name, "userCount": 0, "permissions": []} for r in roles]}
 
 
 @router.post(

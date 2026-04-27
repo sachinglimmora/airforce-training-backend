@@ -28,6 +28,8 @@ class ActionRequest(BaseModel):
     payload: dict = {}
 
 
+from sqlalchemy.orm import selectinload
+
 @router.get(
     "",
     response_model=dict,
@@ -50,20 +52,38 @@ async def list_scenarios(
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
-    result = await db.execute(select(Scenario))
+    result = await db.execute(select(Scenario).options(selectinload(Scenario.aircraft)))
     scenarios = result.scalars().all()
-    return {
-        "data": [
-            {
-                "id": str(s.id),
-                "scenario_code": s.scenario_code,
-                "name": s.name,
-                "scenario_type": s.scenario_type,
-                "description": s.description,
-            }
-            for s in scenarios
-        ]
-    }
+    
+    # Mapping for frontend compatibility
+    data = []
+    for s in scenarios:
+        # Map backend types to frontend simulation types
+        sim_type = "flight-readiness"
+        if s.scenario_type == "custom":
+            sim_type = "maintenance"
+        elif s.scenario_type in ["v1_cut", "engine_fire"]:
+            sim_type = "mission-rehearsal"
+
+        data.append({
+            "id": str(s.id),
+            "title": s.name,
+            "description": s.description or "No description provided.",
+            "type": sim_type,
+            "difficulty": "intermediate", # Default
+            "duration": "45 mins", # Default
+            "status": "available", # Default
+            "aircraft": s.aircraft.type_code if s.aircraft else "Unknown",
+            "briefing": s.description or "Mission briefing pending intelligence update.",
+            "objectives": [
+                "Maintain aircraft control",
+                "Execute prescribed QRH procedures",
+                "Coordinate with ATC",
+                "Successfully complete mission objectives"
+            ] # Default objectives to prevent crash
+        })
+    
+    return {"data": data}
 
 
 @router.get(
@@ -90,18 +110,40 @@ async def get_scenario(
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    result = await db.execute(select(Scenario).where(Scenario.id == scenario_id))
+    result = await db.execute(
+        select(Scenario)
+        .options(selectinload(Scenario.aircraft))
+        .where(Scenario.id == scenario_id)
+    )
     s = result.scalar_one_or_none()
     if not s:
         from app.core.exceptions import NotFound
         raise NotFound("Scenario")
+    
+    # Map backend types to frontend simulation types
+    sim_type = "flight-readiness"
+    if s.scenario_type == "custom":
+        sim_type = "maintenance"
+    elif s.scenario_type in ["v1_cut", "engine_fire"]:
+        sim_type = "mission-rehearsal"
+
     return {
         "data": {
             "id": str(s.id),
-            "scenario_code": s.scenario_code,
-            "name": s.name,
-            "scenario_type": s.scenario_type,
+            "title": s.name,
             "description": s.description,
+            "type": sim_type,
+            "difficulty": "intermediate",
+            "duration": "45 mins",
+            "status": "available",
+            "aircraft": s.aircraft.type_code if s.aircraft else "Unknown",
+            "briefing": s.description or "Mission briefing pending intelligence update.",
+            "objectives": [
+                "Maintain aircraft control",
+                "Execute prescribed QRH procedures",
+                "Coordinate with ATC",
+                "Successfully complete mission objectives"
+            ],
             "initial_conditions": s.initial_conditions,
             "trigger_config": s.trigger_config,
             "procedure_id": str(s.procedure_id) if s.procedure_id else None,
