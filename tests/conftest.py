@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.database import Base, get_db
 from app.main import app
 
-TEST_DATABASE_URL = "postgresql+asyncpg://aegis:aegis@localhost:5432/aegis_test"
+import os
+from app.config import get_settings
+
+settings = get_settings()
+TEST_DATABASE_URL = os.getenv("DATABASE_URL", settings.DATABASE_URL)
+
 
 engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestingSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
