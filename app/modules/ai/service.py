@@ -163,21 +163,24 @@ class AIService:
             log.warning("ai_request_log_failed", error=str(exc))
 
     async def _resolve_citations(self, citation_keys: list[str]) -> str:
+        if not citation_keys:
+            return ""
         from sqlalchemy import select
         from app.modules.content.models import ContentReference, ContentSection
 
+        result = await self.db.execute(
+            select(ContentReference, ContentSection)
+            .join(ContentSection, ContentSection.id == ContentReference.section_id)
+            .where(ContentReference.citation_key.in_(citation_keys))
+        )
+        # Preserve input order
+        by_key = {ref.citation_key: sec for ref, sec in result}
         parts = []
         for key in citation_keys:
-            result = await self.db.execute(
-                select(ContentReference).where(ContentReference.citation_key == key)
-            )
-            ref = result.scalar_one_or_none()
-            if not ref:
+            sec = by_key.get(key)
+            if sec is None:
+                from app.core.exceptions import CitationNotFound
                 raise CitationNotFound(key)
-            sec_result = await self.db.execute(
-                select(ContentSection).where(ContentSection.id == ref.section_id)
-            )
-            sec = sec_result.scalar_one_or_none()
-            if sec and sec.content_markdown:
+            if sec.content_markdown:
                 parts.append(f"[{key}] {sec.content_markdown}")
         return "\n\n".join(parts)
