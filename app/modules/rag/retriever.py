@@ -57,5 +57,43 @@ async def _vector_search(
     return [dict(row._mapping) for row in result]
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    import math
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _mmr_rerank(candidates: list[dict], lambda_: float, qvec: list[float]) -> list[dict]:
+    """Greedy Maximum Marginal Relevance.
+
+    candidates: list of dicts with at least 'embedding' (list[float]) and 'score' (float).
+    Returns reordered list, same length, with no duplicates.
+    """
+    if not candidates:
+        return []
+    selected: list[dict] = []
+    remaining = list(candidates)
+    # First pick = highest score
+    remaining.sort(key=lambda c: -c["score"])
+    selected.append(remaining.pop(0))
+
+    while remaining:
+        best_idx = 0
+        best_mmr = -float("inf")
+        for i, cand in enumerate(remaining):
+            sim_to_query = cand["score"]
+            sim_to_selected = max(_cosine(cand["embedding"], s["embedding"]) for s in selected)
+            mmr = lambda_ * sim_to_query - (1 - lambda_) * sim_to_selected
+            if mmr > best_mmr:
+                best_mmr = mmr
+                best_idx = i
+        selected.append(remaining.pop(best_idx))
+    return selected
+
+
 async def retrieve(db: AsyncSession, query: str, aircraft_id: UUID | None, cfg: dict | None = None) -> list[Hit]:
     raise NotImplementedError  # implemented in Task C3
