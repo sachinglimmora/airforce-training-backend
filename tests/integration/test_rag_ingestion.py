@@ -31,3 +31,15 @@ async def test_embed_source_creates_chunks(db_session):
     # source status updated
     src_after = (await db_session.execute(select(ContentSource).where(ContentSource.id == source.id))).scalar_one()
     assert src_after.embedding_status == "succeeded"
+
+
+async def test_approve_source_enqueues_embed_task(db_session):
+    source = await seed_synthetic_fcom(db_session)
+    source.status = "draft"
+    await db_session.commit()
+
+    from app.modules.content.service import ContentService
+    svc = ContentService(db_session)
+    with patch("app.modules.content.service.embed_source") as mock_task:
+        await svc.approve_source(str(source.id), uuid.uuid4())
+        mock_task.delay.assert_called_once_with(str(source.id))

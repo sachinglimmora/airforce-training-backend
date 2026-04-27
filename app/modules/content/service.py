@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFound
 from app.modules.content.models import ContentReference, ContentSection, ContentSource
+from app.modules.rag.tasks import embed_source
 
 log = structlog.get_logger()
 
@@ -62,6 +63,9 @@ class ContentService:
         source.approved_by = approver_id
         source.approved_at = datetime.now(UTC)
         source.status = "approved"
+        await self.db.flush()
+        embed_source.delay(str(source.id))
+        log.info("approve_source_enqueued_embed", source_id=str(source.id))
         return source
 
     async def archive_source(self, source_id: str) -> ContentSource:
