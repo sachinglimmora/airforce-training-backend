@@ -20,6 +20,7 @@ import app.modules.vr_telemetry.models  # noqa: F401
 import app.modules.audit.models  # noqa: F401
 import app.modules.assets.models  # noqa: F401
 import app.modules.ai_assistant.models  # noqa: F401
+import app.modules.rag.models  # noqa: F401
 
 config = context.config
 if config.config_file_name:
