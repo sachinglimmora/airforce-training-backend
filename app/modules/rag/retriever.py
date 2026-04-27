@@ -38,6 +38,7 @@ async def _vector_search(
             c.section_id,
             c.citation_keys,
             c.content,
+            c.embedding,
             sec.page_number,
             1 - (c.embedding <=> CAST(:qvec AS vector)) AS cosine_score
         FROM content_chunks c
@@ -54,7 +55,12 @@ async def _vector_search(
         "aircraft_id": str(aircraft_id) if aircraft_id else None,
         "top_k": top_k,
     })
-    return [dict(row._mapping) for row in result]
+    out = []
+    for row in result:
+        d = dict(row._mapping)
+        d["embedding"] = list(d["embedding"])
+        out.append(d)
+    return out
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -95,5 +101,43 @@ def _mmr_rerank(candidates: list[dict], lambda_: float, qvec: list[float]) -> li
     return selected
 
 
-async def retrieve(db: AsyncSession, query: str, aircraft_id: UUID | None, cfg: dict | None = None) -> list[Hit]:
-    raise NotImplementedError  # implemented in Task C3
+async def retrieve(
+    db: AsyncSession,
+    query: str,
+    aircraft_id: UUID | None,
+    cfg: dict | None = None,
+) -> tuple[list[Hit], dict]:
+    """Embed query, vector search, MMR diversify, return Hit list + latency dict."""
+    import time
+    from app.modules.rag.embedder import embed_and_validate
+
+    cfg = cfg or {
+        "top_k": _settings.RAG_TOP_K,
+        "mmr_lambda": _settings.RAG_MMR_LAMBDA,
+    }
+    latency: dict[str, int] = {}
+
+    t0 = time.monotonic()
+    qvec = (await embed_and_validate([query]))[0]
+    latency["embed"] = int((time.monotonic() - t0) * 1000)
+
+    t0 = time.monotonic()
+    candidates = await _vector_search(db, qvec, cfg["top_k"], aircraft_id)
+    latency["vector_search"] = int((time.monotonic() - t0) * 1000)
+
+    t0 = time.monotonic()
+    diversified = _mmr_rerank(candidates, cfg["mmr_lambda"], qvec)
+    latency["mmr"] = int((time.monotonic() - t0) * 1000)
+
+    hits = []
+    for rank, c in enumerate(diversified):
+        hits.append(Hit(
+            chunk_id=c["chunk_id"],
+            section_id=c["section_id"],
+            citation_keys=c["citation_keys"],
+            content=c["content"],
+            page_number=c["page_number"],
+            score=float(c["cosine_score"]),
+            mmr_rank=rank,
+        ))
+    return hits, latency
