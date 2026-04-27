@@ -141,6 +141,19 @@ def create_app() -> FastAPI:
     async def startup():
         log.info("aegis_backend_started", env=settings.ENV)
 
+    @app.on_event("startup")
+    async def _validate_embedding_dim():
+        if not (settings.OPENAI_API_KEY or settings.GEMINI_API_KEY):
+            log.warning("embedding_dim_check_skipped", reason="no_api_keys")
+            return
+        try:
+            from app.modules.rag.embedder import embed_and_validate
+            vec = await embed_and_validate(["dimension check"])
+            log.info("embedding_dim_validated", dim=len(vec[0]))
+        except Exception as exc:
+            log.error("embedding_dim_check_failed", error=str(exc))
+            raise
+
     @app.on_event("shutdown")
     async def shutdown():
         log.info("aegis_backend_stopped")
