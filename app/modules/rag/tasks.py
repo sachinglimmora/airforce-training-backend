@@ -144,6 +144,21 @@ def reembed_all_dim_mismatch() -> int:
     return asyncio.run(_reembed_all_dim_mismatch_async())
 
 
+async def _auto_close_idle_sessions_async() -> int:
+    from datetime import UTC, datetime, timedelta
+    cutoff = datetime.now(UTC) - timedelta(days=_settings.CHAT_SESSION_AUTO_CLOSE_DAYS)
+    async with AsyncSessionLocal() as db:
+        from app.modules.ai_assistant.models import ChatSession
+        from sqlalchemy import update
+        result = await db.execute(
+            update(ChatSession)
+            .where(ChatSession.status == "active", ChatSession.last_activity_at < cutoff)
+            .values(status="closed", closed_at=datetime.now(UTC))
+        )
+        await db.commit()
+        return result.rowcount or 0
+
+
 @celery_app.task(name="rag.auto_close_idle_sessions")
 def auto_close_idle_sessions() -> int:
-    raise NotImplementedError
+    return asyncio.run(_auto_close_idle_sessions_async())
