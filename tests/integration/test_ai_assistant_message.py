@@ -51,35 +51,40 @@ async def test_send_message_returns_grounded_answer(client, db_session):
             "request_id": "req_x",
         }
 
-    # Patch AIService at its DEFINITION site so deferred imports inside embedder.py
-    # and top-level imports in rewriter.py / service.py all pick up the mock.
-    with patch("app.modules.ai.service.AIService") as mock_ai_cls, \
-         patch("app.modules.auth.deps.get_current_user") as mock_user:
-        instance = mock_ai_cls.return_value
-        instance.embed = AsyncMock(side_effect=fake_embed_factory)
-        instance.complete = AsyncMock(side_effect=fake_complete)
-        from app.modules.auth.schemas import CurrentUser
-        mock_user.return_value = CurrentUser(
-            id=str(uuid.uuid4()), roles=["trainee"], jti=""
-        )
+    from app.main import app
+    from app.modules.auth.deps import get_current_user
+    from app.modules.auth.schemas import CurrentUser
 
-        resp = await client.post(
-            "/api/v1/ai-assistant/message", json={"content": "engine start procedure?"}
-        )
-        assert resp.status_code == 200, resp.text
-        body = resp.json()["data"]
-        assert body["userMessage"]["content"] == "engine start procedure?"
-        assistant = body["assistantMessage"]
-        assert "grounded" in assistant, (
-            f"missing 'grounded' in assistantMessage. Full response shape: {body}"
-        )
-        assert assistant["grounded"] in ("strong", "soft"), (
-            f"expected strong/soft grounding; got {assistant['grounded']!r}. "
-            f"sources={assistant.get('sources')}, suggestions={assistant.get('suggestions')}"
-        )
-        assert primary_key in assistant["content"]
-        # Sources should include at least one of the seeded citation keys.
-        returned_keys = {s["citation_key"] for s in assistant["sources"]}
-        assert returned_keys & set(citation_keys), (
-            f"expected at least one of {citation_keys} in sources, got {returned_keys}"
-        )
+    fake_user = CurrentUser(id=str(uuid.uuid4()), roles=["trainee"], jti="")
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+
+    try:
+        # Patch AIService at its DEFINITION site so deferred imports inside embedder.py
+        # and top-level imports in rewriter.py / service.py all pick up the mock.
+        with patch("app.modules.ai.service.AIService") as mock_ai_cls:
+            instance = mock_ai_cls.return_value
+            instance.embed = AsyncMock(side_effect=fake_embed_factory)
+            instance.complete = AsyncMock(side_effect=fake_complete)
+
+            resp = await client.post(
+                "/api/v1/ai-assistant/message", json={"content": "engine start procedure?"}
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()["data"]
+            assert body["userMessage"]["content"] == "engine start procedure?"
+            assistant = body["assistantMessage"]
+            assert "grounded" in assistant, (
+                f"missing 'grounded' in assistantMessage. Full response shape: {body}"
+            )
+            assert assistant["grounded"] in ("strong", "soft"), (
+                f"expected strong/soft grounding; got {assistant['grounded']!r}. "
+                f"sources={assistant.get('sources')}, suggestions={assistant.get('suggestions')}"
+            )
+            assert primary_key in assistant["content"]
+            # Sources should include at least one of the seeded citation keys.
+            returned_keys = {s["citation_key"] for s in assistant["sources"]}
+            assert returned_keys & set(citation_keys), (
+                f"expected at least one of {citation_keys} in sources, got {returned_keys}"
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

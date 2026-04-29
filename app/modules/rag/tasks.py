@@ -47,7 +47,6 @@ async def _reembed_source_async(source_id: str) -> int:
 
 
 async def _embed_source_async(source_id: str) -> int:
-    print(f"[embed_source] starting for source {source_id}")
     async with AsyncSessionLocal() as db:
         source = await _load_source_with_tree(db, source_id)
         if not source:
@@ -111,7 +110,6 @@ async def _embed_source_async(source_id: str) -> int:
 
         source.embedding_status = "succeeded"
         await db.commit()
-        print(f"[embed_source] completed, returned {len(chunks)}")
         return len(chunks)
 
 
