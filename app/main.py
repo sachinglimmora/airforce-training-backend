@@ -82,11 +82,11 @@ def create_app() -> FastAPI:
     app.include_router(audit_router, prefix=f"{prefix}/audit", tags=["audit"])
     app.include_router(assets_router, prefix=f"{prefix}/assets", tags=["assets"])
     app.include_router(training_router, prefix=f"{prefix}", tags=["training"])
+    app.include_router(ai_assistant_router, prefix=f"{prefix}/ai-assistant", tags=["ai-assistant"])
     app.include_router(compatibility_router, prefix=f"{prefix}", tags=["compatibility"])
     app.include_router(instructor_router, prefix=f"{prefix}/instructor", tags=["instructor"])
     app.include_router(digital_twin_router, prefix=f"{prefix}/digital-twin", tags=["digital-twin"])
     app.include_router(progress_router, prefix=f"{prefix}/progress", tags=["progress"])
-    app.include_router(ai_assistant_router, prefix=f"{prefix}/ai-assistant", tags=["ai-assistant"])
     app.include_router(rag_router, prefix=f"{prefix}/rag", tags=["rag"])
     app.include_router(alerts_router, prefix=f"{prefix}/alerts", tags=["alerts"])
     app.include_router(

@@ -46,7 +46,12 @@ async def test_embed_source_creates_chunks(db_session):
         instance.embed = AsyncMock(side_effect=_fake_embed)
         # Run via thread (asyncio.run inside Celery task gets its own loop) to avoid
         # cross-loop conflicts with the global engine in app.database.
-        await asyncio.to_thread(embed_source, str(source.id))
+        try:
+            result = await asyncio.to_thread(embed_source, str(source.id))
+        except Exception as exc:
+            raise AssertionError(f"embed_source raised: {type(exc).__name__}: {exc}") from exc
+        else:
+            assert result is not None, "embed_source returned None"
 
     rows = (await db_session.execute(
         select(ContentChunk).where(ContentChunk.source_id == source.id)
