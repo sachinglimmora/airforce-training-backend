@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from sqlalchemy import select
 
 from app.modules.auth.models import User
-from app.modules.content.models import ContentReference, ContentSource
+from app.modules.content.models import ContentReference
 from app.modules.rag.models import ContentChunk
 from app.modules.rag.tasks import embed_source
 from tests.fixtures.synthetic_fcom import seed_synthetic_fcom
@@ -58,16 +58,14 @@ async def test_embed_source_creates_chunks(db_session):
     assert all(c.embedding_dim == 1536 for c in rows)
     assert all(len(c.embedding) == 1536 for c in rows)
 
-    # source status updated — embed_source runs in a separate thread/loop so
-    # the test's session needs to reload the row to see the committed change.
-    await db_session.commit()  # close any pending tx so a fresh select sees committed data
-    db_session.expire_all()
-    src_after = (await db_session.execute(
-        select(ContentSource).where(ContentSource.id == source.id)
-    )).scalar_one()
-    assert src_after.embedding_status == "succeeded", (
-        f"expected 'succeeded'; got '{src_after.embedding_status}'. "
-        "This usually means embed_source raised silently in the worker thread."
+    # embed_source committed source.embedding_status='succeeded' on a different session
+    # (in the worker thread). Refresh our session's view of the row to see it.
+    await db_session.commit()
+    await db_session.refresh(source)
+    assert source.embedding_status == "succeeded", (
+        f"expected 'succeeded'; got '{source.embedding_status}'. "
+        "embed_source ran (per the diagnostic prints in earlier CI runs); the test session "
+        "needs an explicit refresh to see the worker thread's commit."
     )
 
 

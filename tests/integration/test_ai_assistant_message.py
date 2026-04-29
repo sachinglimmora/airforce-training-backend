@@ -53,9 +53,19 @@ async def test_send_message_returns_grounded_answer(client, db_session):
 
     from app.main import app
     from app.modules.auth.deps import get_current_user
-    from app.modules.auth.schemas import CurrentUser
 
-    fake_user = CurrentUser(id=str(uuid.uuid4()), roles=["trainee"], jti="")
+    # Insert a real user so chat_sessions.user_id FK resolves
+    from app.modules.auth.models import User
+    from app.modules.auth.schemas import CurrentUser
+    real_user = User(
+        id=uuid.uuid4(),
+        email=f"test-{uuid.uuid4().hex[:8]}@example.com",
+        password_hash="x",
+        full_name="Integration Test User",
+    )
+    db_session.add(real_user)
+    await db_session.commit()
+    fake_user = CurrentUser(id=str(real_user.id), roles=["trainee"], jti="")
     app.dependency_overrides[get_current_user] = lambda: fake_user
 
     try:
