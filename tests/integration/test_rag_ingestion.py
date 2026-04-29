@@ -58,11 +58,16 @@ async def test_embed_source_creates_chunks(db_session):
     assert all(c.embedding_dim == 1536 for c in rows)
     assert all(len(c.embedding) == 1536 for c in rows)
 
-    # source status updated
+    # source status updated — embed_source runs in a separate thread/loop so
+    # the test's session needs to reload the row to see the committed change.
+    await db_session.commit()  # close any pending tx so a fresh select sees committed data
     src_after = (await db_session.execute(
         select(ContentSource).where(ContentSource.id == source.id)
     )).scalar_one()
-    assert src_after.embedding_status == "succeeded"
+    assert src_after.embedding_status == "succeeded", (
+        f"expected 'succeeded'; got '{src_after.embedding_status}'. "
+        "This usually means embed_source raised silently in the worker thread."
+    )
 
 
 async def test_approve_source_enqueues_embed_task(db_session):

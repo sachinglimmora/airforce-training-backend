@@ -69,10 +69,17 @@ async def test_send_message_returns_grounded_answer(client, db_session):
         assert resp.status_code == 200, resp.text
         body = resp.json()["data"]
         assert body["userMessage"]["content"] == "engine start procedure?"
-        assert body["assistantMessage"]["grounded"] in ("strong", "soft")
-        assert primary_key in body["assistantMessage"]["content"]
+        assistant = body["assistantMessage"]
+        assert "grounded" in assistant, (
+            f"missing 'grounded' in assistantMessage. Full response shape: {body}"
+        )
+        assert assistant["grounded"] in ("strong", "soft"), (
+            f"expected strong/soft grounding; got {assistant['grounded']!r}. "
+            f"sources={assistant.get('sources')}, suggestions={assistant.get('suggestions')}"
+        )
+        assert primary_key in assistant["content"]
         # Sources should include at least one of the seeded citation keys.
-        returned_keys = {s["citation_key"] for s in body["assistantMessage"]["sources"]}
+        returned_keys = {s["citation_key"] for s in assistant["sources"]}
         assert returned_keys & set(citation_keys), (
             f"expected at least one of {citation_keys} in sources, got {returned_keys}"
         )
