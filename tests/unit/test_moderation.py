@@ -189,3 +189,70 @@ def test_resolve_all_violations_in_result_regardless_of_action():
     out = _resolve_action([block, redact, log_v], "original text")
     assert out.action == "block"
     assert len(out.all) == 3
+
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.modules.rag.moderator import load_rules, invalidate_cache
+
+
+def _row(category, pattern, action, severity, pattern_type="regex", active=True):
+    r = MagicMock()
+    r.id = uuid.uuid4()
+    r.category = category
+    r.pattern = pattern
+    r.pattern_type = pattern_type
+    r.action = action
+    r.severity = severity
+    r.active = active
+    return r
+
+
+async def test_load_rules_from_db_when_cache_miss():
+    rows = [_row("classification", r"\bSECRET\b", "block", "critical")]
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: rows)))
+    with patch("app.modules.rag.moderator._cache_get", new=AsyncMock(return_value=None)) as mock_get, \
+         patch("app.modules.rag.moderator._cache_set", new=AsyncMock()) as mock_set:
+        out = await load_rules(db)
+        assert "classification" in out
+        assert len(out["classification"]) == 1
+        assert isinstance(out["classification"][0].compiled, re.Pattern)
+        mock_get.assert_awaited_once()
+        mock_set.assert_awaited_once()
+
+
+async def test_load_rules_skips_invalid_regex():
+    bad = _row("classification", r"[unclosed", "block", "critical")
+    good = _row("classification", r"\bSECRET\b", "block", "critical")
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: [bad, good])))
+    with patch("app.modules.rag.moderator._cache_get", new=AsyncMock(return_value=None)), \
+         patch("app.modules.rag.moderator._cache_set", new=AsyncMock()):
+        out = await load_rules(db)
+        # bad rule skipped, good one kept
+        assert len(out["classification"]) == 1
+
+
+async def test_load_rules_handles_literal_pattern_type():
+    row = _row("banned_phrase", "verbatim phrase", "block", "high", pattern_type="literal")
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: [row])))
+    with patch("app.modules.rag.moderator._cache_get", new=AsyncMock(return_value=None)), \
+         patch("app.modules.rag.moderator._cache_set", new=AsyncMock()):
+        out = await load_rules(db)
+        cr = out["banned_phrase"][0]
+        assert cr.compiled.search("contains verbatim phrase here")
+
+
+async def test_invalidate_cache_calls_redis_del():
+    with patch("app.modules.rag.moderator._cache_del", new=AsyncMock()) as mock_del:
+        await invalidate_cache()
+        mock_del.assert_awaited_once_with(_cache_key())
+
+
+def _cache_key():
+    from app.modules.rag.moderator import _CACHE_KEY
+    return _CACHE_KEY

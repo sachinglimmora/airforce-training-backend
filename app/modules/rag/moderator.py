@@ -143,6 +143,103 @@ def _resolve_action(
     return ModerationResult(action="log", primary=None, all=violations)
 
 
-# Detector + orchestration functions defined in subsequent tasks
+async def _cache_get(key: str) -> bytes | None:
+    import redis.asyncio as aioredis
+    try:
+        r = aioredis.from_url(_settings.REDIS_URL)
+        raw = await r.get(key)
+        await r.aclose()
+        return raw
+    except Exception as exc:
+        log.warning("moderation_cache_read_error", error=str(exc))
+        return None
+
+
+async def _cache_set(key: str, value: bytes, ttl: int) -> None:
+    import redis.asyncio as aioredis
+    try:
+        r = aioredis.from_url(_settings.REDIS_URL)
+        await r.setex(key, ttl, value)
+        await r.aclose()
+    except Exception as exc:
+        log.warning("moderation_cache_write_error", error=str(exc))
+
+
+async def _cache_del(key: str) -> None:
+    import redis.asyncio as aioredis
+    try:
+        r = aioredis.from_url(_settings.REDIS_URL)
+        await r.delete(key)
+        await r.aclose()
+    except Exception as exc:
+        log.warning("moderation_cache_del_error", error=str(exc))
+
+
+def _compile_one(pattern: str, pattern_type: str) -> re.Pattern:
+    if pattern_type == "literal":
+        return re.compile(re.escape(pattern), re.IGNORECASE)
+    return re.compile(pattern, re.IGNORECASE)
+
+
+async def load_rules(db) -> dict[Category, list[CompiledRule]]:
+    """Load active rules grouped by category. Compiled patterns are NOT cached
+    (re.Pattern doesn't pickle cleanly); the cache stores rule dicts, and
+    re-compilation runs on each load. Cheap (~50 patterns max in practice)."""
+    import json
+    from sqlalchemy import select
+    from app.modules.rag.models import ModerationRule
+
+    cached = await _cache_get(_CACHE_KEY)
+    if cached:
+        try:
+            rule_dicts = json.loads(cached)
+            return _build_compiled(rule_dicts)
+        except Exception as exc:
+            log.warning("moderation_cache_decode_error", error=str(exc))
+
+    result = await db.execute(select(ModerationRule).where(ModerationRule.active == True))  # noqa: E712
+    rows = result.scalars().all()
+    rule_dicts = [
+        {
+            "id": str(r.id),
+            "category": r.category,
+            "pattern": r.pattern,
+            "pattern_type": r.pattern_type,
+            "action": r.action,
+            "severity": r.severity,
+        }
+        for r in rows
+    ]
+
+    try:
+        await _cache_set(_CACHE_KEY, json.dumps(rule_dicts).encode(), _settings.MODERATION_CACHE_TTL_S)
+    except Exception:
+        pass  # cache write failure is non-fatal; we still return the loaded rules
+
+    return _build_compiled(rule_dicts)
+
+
+def _build_compiled(rule_dicts: list[dict]) -> dict[Category, list[CompiledRule]]:
+    out: dict[Category, list[CompiledRule]] = defaultdict(list)
+    for r in rule_dicts:
+        try:
+            compiled = _compile_one(r["pattern"], r["pattern_type"])
+        except re.error as exc:
+            log.error("moderation_rule_compile_failed", rule_id=r["id"], pattern=r["pattern"], error=str(exc))
+            continue
+        out[r["category"]].append(CompiledRule(
+            rule_id=uuid.UUID(r["id"]),
+            category=r["category"],
+            action=r["action"],
+            severity=r["severity"],
+            compiled=compiled,
+        ))
+    return out
+
+
+async def invalidate_cache() -> None:
+    await _cache_del(_CACHE_KEY)
+
+
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
     raise NotImplementedError  # implemented in Task B8
