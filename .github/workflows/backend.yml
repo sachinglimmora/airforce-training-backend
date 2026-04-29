@@ -3,12 +3,25 @@ name: Backend CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+
+# Cancel in-progress runs on the same ref when newer commits land —
+# saves CI minutes when we push a rapid series of fixes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # protect against a hung test eating an hour of CI minutes
 
     services:
       postgres:
@@ -34,7 +47,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       meilisearch:
-        image: getmeili/meilisearch:latest
+        image: getmeili/meilisearch:v1.11  # pinned (was 'latest' — risk of upstream-breaking-change)
         ports:
           - 7700:7700
         env:
@@ -76,6 +89,8 @@ jobs:
         CELERY_RESULT_BACKEND: redis://localhost:6379/0
         MEILI_URL: http://localhost:7700
         MEILI_MASTER_KEY: masterKey
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # Force empty so the embedding-dim startup health check skips the API call
+        # instead of attempting real Gemini if the repo secret is set.
+        GEMINI_API_KEY: ""
         ENV: test
       run: pytest
