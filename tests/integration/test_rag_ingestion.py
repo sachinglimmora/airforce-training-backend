@@ -14,10 +14,17 @@ async def test_embed_source_creates_chunks(db_session):
     source = await seed_synthetic_fcom(db_session)
     await db_session.commit()
 
-    fake_embeddings = {"embeddings": [[0.1] * 1536] * 50, "model": "text-embedding-3-small", "usage": {"total_tokens": 100}}
+    async def fake_embed(texts, *args, **kwargs):
+        # Return exactly as many vectors as input texts so zip(strict=True) succeeds.
+        return {
+            "embeddings": [[0.1] * 1536 for _ in texts],
+            "model": "text-embedding-3-small",
+            "usage": {"total_tokens": 100},
+        }
+
     with patch("app.modules.ai.service.AIService") as mock_ai:
         instance = mock_ai.return_value
-        instance.embed = AsyncMock(return_value=fake_embeddings)
+        instance.embed = AsyncMock(side_effect=fake_embed)
         await asyncio.to_thread(embed_source, str(source.id))
 
     rows = (await db_session.execute(select(ContentChunk).where(ContentChunk.source_id == source.id))).scalars().all()

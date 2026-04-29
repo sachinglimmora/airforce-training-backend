@@ -8,9 +8,12 @@ from tests.fixtures.synthetic_fcom import seed_synthetic_fcom
 async def test_vector_search_returns_chunks_with_scores(db_session):
     source = await seed_synthetic_fcom(db_session)
     await db_session.commit()
-    fake = {"embeddings": [[0.1] * 1536] * 50, "model": "x", "usage": {"total_tokens": 1}}
+
+    async def fake_embed(texts, *args, **kwargs):
+        return {"embeddings": [[0.1] * 1536 for _ in texts], "model": "x", "usage": {"total_tokens": 1}}
+
     with patch("app.modules.ai.service.AIService") as mock_ai:
-        mock_ai.return_value.embed = AsyncMock(return_value=fake)
+        mock_ai.return_value.embed = AsyncMock(side_effect=fake_embed)
         await _embed_source_async(str(source.id))
 
     qvec = [0.1] * 1536
