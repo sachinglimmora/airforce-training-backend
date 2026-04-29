@@ -22,6 +22,12 @@ class ContentSourceOut(BaseModel):
     approved_at: datetime | None
     created_at: datetime
 
+    # Lifecycle tracking (R73)
+    last_reviewed_at: datetime | None = None
+    last_reviewed_by: uuid.UUID | None = None
+    next_review_due: datetime | None = None
+    deprecation_date: date | None = None
+
     model_config = {"from_attributes": True}
 
 
@@ -61,3 +67,7 @@ class IngestionJobOut(BaseModel):
     source_id: uuid.UUID
     status: str
     job_id: str
+
+
+class MarkReviewedRequest(BaseModel):
+    next_review_in_days: int | None = Field(default=None, ge=1, le=3650)

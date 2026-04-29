@@ -38,6 +38,35 @@ class Settings(BaseSettings):
     AI_GLOBAL_RATE_LIMIT: int = 2000
     AI_PROVIDER_TIMEOUT_SECONDS: int = 15
 
+    # ─── RAG ────────────────────────────────────────────────────────────────
+    # Embedding
+    EMBEDDING_DIM: int = 1536
+    EMBEDDING_MODEL_HINT: str = "text-embedding-3-small"
+
+    # Chunking
+    RAG_CHUNK_TOKENS_MAX: int = 800
+    RAG_CHUNK_OVERLAP_TOKENS: int = 100
+    RAG_CHUNK_TOKENS_MIN_MERGE: int = 100
+
+    # Retrieval / grounding
+    RAG_TOP_K: int = 10
+    RAG_MAX_CHUNKS: int = 5
+    RAG_INCLUDE_THRESHOLD: float = 0.65
+    RAG_SOFT_INCLUDE_THRESHOLD: float = 0.60
+    RAG_SUGGEST_THRESHOLD: float = 0.50
+    RAG_MMR_LAMBDA: float = 0.5
+    RAG_USE_RERANKER: bool = False
+
+    # Query rewriter
+    RAG_REWRITER_MODEL: str = "gemini-1.5-flash"
+    RAG_REWRITER_TIMEOUT_S: int = 5
+    RAG_REWRITER_MAX_TOKENS: int = 100
+    RAG_REWRITER_HISTORY_WINDOW: int = 6
+    RAG_REWRITER_CACHE_TTL_S: int = 3600
+
+    # Chat session
+    CHAT_SESSION_AUTO_CLOSE_DAYS: int = 30
+
     # MinIO
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = ""
@@ -52,6 +81,15 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    # ─── Content lifecycle (R73) ────────────────────────────────────────────
+    CONTENT_REVIEW_CADENCE_DAYS_DEFAULT: int = 90
+    CONTENT_REVIEW_CADENCE_DAYS_FCOM: int = 180
+    CONTENT_REVIEW_CADENCE_DAYS_QRH: int = 90
+    CONTENT_REVIEW_CADENCE_DAYS_AMM: int = 180
+    CONTENT_REVIEW_CADENCE_DAYS_SOP: int = 90
+    CONTENT_REVIEW_CADENCE_DAYS_SYLLABUS: int = 60
+    CONTENT_EXPIRING_SOON_WINDOW_DAYS: int = 14
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

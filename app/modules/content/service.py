@@ -7,11 +7,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.config import get_settings as _get_settings_for_cadence
 from app.core.exceptions import NotFound
 from app.modules.content.models import ContentReference, ContentSection, ContentSource
+from app.modules.rag.tasks import embed_source
 
 log = structlog.get_logger()
 _settings = get_settings()
+
+
+def _cadence_for(source_type: str) -> int:
+    """Returns review cadence in days based on source type."""
+    s = _get_settings_for_cadence()
+    return {
+        "fcom": s.CONTENT_REVIEW_CADENCE_DAYS_FCOM,
+        "qrh": s.CONTENT_REVIEW_CADENCE_DAYS_QRH,
+        "amm": s.CONTENT_REVIEW_CADENCE_DAYS_AMM,
+        "sop": s.CONTENT_REVIEW_CADENCE_DAYS_SOP,
+        "syllabus": s.CONTENT_REVIEW_CADENCE_DAYS_SYLLABUS,
+    }.get(source_type, s.CONTENT_REVIEW_CADENCE_DAYS_DEFAULT)
 
 
 def _upload_to_minio_sync(file_bytes: bytes, object_key: str) -> None:
@@ -102,6 +116,12 @@ class ContentService:
         source.approved_by = approver_id
         source.approved_at = datetime.now(UTC)
         source.status = "approved"
+        if source.next_review_due is None:
+            from datetime import UTC, datetime, timedelta
+            source.next_review_due = datetime.now(UTC) + timedelta(days=_cadence_for(source.source_type))
+        await self.db.flush()
+        embed_source.delay(str(source.id))
+        log.info("approve_source_enqueued_embed", source_id=str(source.id))
         return source
 
     async def archive_source(self, source_id: str) -> ContentSource:
@@ -130,6 +150,60 @@ class ContentService:
         if not ref:
             raise NotFound(f"Citation '{citation_key}'")
         return ref
+
+    async def mark_reviewed(self, source_id: str, reviewer_id, override_days: int | None = None) -> ContentSource:
+        from datetime import UTC, datetime, timedelta
+        source = await self.get_source(source_id)
+        cadence = override_days if override_days is not None else _cadence_for(source.source_type)
+        source.last_reviewed_at = datetime.now(UTC)
+        source.last_reviewed_by = reviewer_id
+        source.next_review_due = datetime.now(UTC) + timedelta(days=cadence)
+        await self.db.flush()
+        return source
+
+    async def list_needs_review(
+        self,
+        source_type: str | None = None,
+        aircraft_id=None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ContentSource]:
+        from datetime import UTC, datetime
+        q = select(ContentSource).where(
+            ContentSource.status == "approved",
+            ContentSource.next_review_due.isnot(None),
+            ContentSource.next_review_due <= datetime.now(UTC),
+        )
+        if source_type:
+            q = q.where(ContentSource.source_type == source_type)
+        if aircraft_id:
+            q = q.where(ContentSource.aircraft_id == aircraft_id)
+        q = q.order_by(ContentSource.next_review_due.asc()).limit(limit).offset(offset)
+        return list((await self.db.execute(q)).scalars().all())
+
+    async def list_expiring_soon(
+        self,
+        within_days: int = 14,
+        source_type: str | None = None,
+        aircraft_id=None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ContentSource]:
+        from datetime import UTC, datetime, timedelta
+        now = datetime.now(UTC)
+        cutoff = now + timedelta(days=within_days)
+        q = select(ContentSource).where(
+            ContentSource.status == "approved",
+            ContentSource.next_review_due.isnot(None),
+            ContentSource.next_review_due > now,
+            ContentSource.next_review_due <= cutoff,
+        )
+        if source_type:
+            q = q.where(ContentSource.source_type == source_type)
+        if aircraft_id:
+            q = q.where(ContentSource.aircraft_id == aircraft_id)
+        q = q.order_by(ContentSource.next_review_due.asc()).limit(limit).offset(offset)
+        return list((await self.db.execute(q)).scalars().all())
 
     async def search(self, q: str, limit: int = 20) -> list[dict]:
         from meilisearch_python_async import Client
