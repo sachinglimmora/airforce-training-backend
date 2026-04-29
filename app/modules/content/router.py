@@ -102,6 +102,58 @@ async def upload_source(
 
 
 @router.get(
+    "/sources/needs-review",
+    response_model=dict,
+    summary="List sources whose next_review_due is in the past (admin/instructor)",
+    operation_id="content_sources_needs_review",
+)
+async def needs_review_endpoint(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    source_type: str | None = None,
+    aircraft_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not (set(current_user.roles) & {"admin", "instructor"}):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    svc = ContentService(db)
+    rows = await svc.list_needs_review(
+        source_type=source_type, aircraft_id=aircraft_id, limit=limit, offset=offset
+    )
+    return {"data": [ContentSourceOut.model_validate(r).model_dump(mode="json") for r in rows]}
+
+
+@router.get(
+    "/sources/expiring-soon",
+    response_model=dict,
+    summary="List sources whose next_review_due falls within `within_days` (admin/instructor)",
+    operation_id="content_sources_expiring_soon",
+)
+async def expiring_soon_endpoint(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    within_days: int | None = None,
+    source_type: str | None = None,
+    aircraft_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not (set(current_user.roles) & {"admin", "instructor"}):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    from app.config import get_settings
+    s = get_settings()
+    window = within_days if within_days is not None else s.CONTENT_EXPIRING_SOON_WINDOW_DAYS
+    svc = ContentService(db)
+    rows = await svc.list_expiring_soon(
+        within_days=window, source_type=source_type, aircraft_id=aircraft_id, limit=limit, offset=offset
+    )
+    return {"data": [ContentSourceOut.model_validate(r).model_dump(mode="json") for r in rows]}
+
+
+@router.get(
     "/sources/{source_id}",
     response_model=dict,
     summary="Get source metadata",
@@ -317,58 +369,6 @@ async def mark_reviewed_endpoint(
     src = await svc.mark_reviewed(source_id, current_user.id, payload.next_review_in_days)
     await db.commit()
     return {"data": ContentSourceOut.model_validate(src).model_dump(mode="json")}
-
-
-@router.get(
-    "/sources/needs-review",
-    response_model=dict,
-    summary="List sources whose next_review_due is in the past (admin/instructor)",
-    operation_id="content_sources_needs_review",
-)
-async def needs_review_endpoint(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    source_type: str | None = None,
-    aircraft_id: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
-):
-    if not (set(current_user.roles) & {"admin", "instructor"}):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Admin or instructor required")
-    svc = ContentService(db)
-    rows = await svc.list_needs_review(
-        source_type=source_type, aircraft_id=aircraft_id, limit=limit, offset=offset
-    )
-    return {"data": [ContentSourceOut.model_validate(r).model_dump(mode="json") for r in rows]}
-
-
-@router.get(
-    "/sources/expiring-soon",
-    response_model=dict,
-    summary="List sources whose next_review_due falls within `within_days` (admin/instructor)",
-    operation_id="content_sources_expiring_soon",
-)
-async def expiring_soon_endpoint(
-    current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-    within_days: int | None = None,
-    source_type: str | None = None,
-    aircraft_id: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
-):
-    if not (set(current_user.roles) & {"admin", "instructor"}):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Admin or instructor required")
-    from app.config import get_settings
-    s = get_settings()
-    window = within_days if within_days is not None else s.CONTENT_EXPIRING_SOON_WINDOW_DAYS
-    svc = ContentService(db)
-    rows = await svc.list_expiring_soon(
-        within_days=window, source_type=source_type, aircraft_id=aircraft_id, limit=limit, offset=offset
-    )
-    return {"data": [ContentSourceOut.model_validate(r).model_dump(mode="json") for r in rows]}
 
 
 @router.get(
