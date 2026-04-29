@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -66,6 +66,14 @@ class ContentSource(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
     )
+
+    # Lifecycle tracking (R73)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    next_review_due: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    deprecation_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
 
     sections: Mapped[list["ContentSection"]] = relationship(
         "ContentSection", back_populates="source", foreign_keys="ContentSection.source_id"
