@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
@@ -70,3 +71,187 @@ async def rag_query(
         hits=hits_out,
         suggestions=suggestions_out,
     ).model_dump()}
+
+
+# ─── Moderation admin endpoints ──────────────────────────────────────────────
+
+
+def _require_admin_or_instructor(current_user: CurrentUser) -> None:
+    if not (set(current_user.roles) & {"admin", "instructor"}):
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+
+
+def _require_admin(current_user: CurrentUser) -> None:
+    if "admin" not in current_user.roles:
+        raise HTTPException(status_code=403, detail="Admin required")
+
+
+@router.get(
+    "/moderation/rules",
+    response_model=dict,
+    summary="List moderation rules (admin/instructor)",
+    operation_id="moderation_rules_list",
+)
+async def list_moderation_rules(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    category: str | None = None,
+    active: bool | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    _require_admin_or_instructor(current_user)
+    from sqlalchemy import select
+
+    from app.modules.rag.models import ModerationRule
+    from app.modules.rag.schemas import ModerationRuleOut
+    q = select(ModerationRule)
+    if category is not None:
+        q = q.where(ModerationRule.category == category)
+    if active is not None:
+        q = q.where(ModerationRule.active == active)
+    q = q.order_by(ModerationRule.created_at.desc()).limit(limit).offset(offset)
+    rows = (await db.execute(q)).scalars().all()
+    return {"data": [ModerationRuleOut.model_validate(r).model_dump(mode="json") for r in rows]}
+
+
+@router.post(
+    "/moderation/rules",
+    response_model=dict,
+    status_code=201,
+    summary="Create a moderation rule (admin/instructor)",
+    operation_id="moderation_rules_create",
+)
+async def create_moderation_rule(
+    body: dict,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    _require_admin_or_instructor(current_user)
+    import re as _re
+
+    from app.modules.rag.models import ModerationRule
+    from app.modules.rag.moderator import invalidate_cache
+    from app.modules.rag.schemas import ModerationRuleIn, ModerationRuleOut
+
+    payload = ModerationRuleIn.model_validate(body)
+    # Validate the regex compiles before persisting (prevents bad patterns sneaking in)
+    if payload.pattern_type == "regex":
+        try:
+            _re.compile(payload.pattern)
+        except _re.error as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid regex: {exc}")
+
+    rule = ModerationRule(
+        category=payload.category,
+        pattern=payload.pattern,
+        pattern_type=payload.pattern_type,
+        action=payload.action,
+        severity=payload.severity,
+        description=payload.description,
+        active=payload.active,
+        created_by=uuid.UUID(str(current_user.id)),
+    )
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    await invalidate_cache()
+    return {"data": ModerationRuleOut.model_validate(rule).model_dump(mode="json")}
+
+
+@router.get(
+    "/moderation/rules/{rule_id}",
+    response_model=dict,
+    summary="Get a single moderation rule (admin/instructor)",
+    operation_id="moderation_rules_get",
+)
+async def get_moderation_rule(
+    rule_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    _require_admin_or_instructor(current_user)
+    from sqlalchemy import select
+
+    from app.modules.rag.models import ModerationRule
+    from app.modules.rag.schemas import ModerationRuleOut
+    rule = (await db.execute(select(ModerationRule).where(ModerationRule.id == rule_id))).scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"data": ModerationRuleOut.model_validate(rule).model_dump(mode="json")}
+
+
+@router.patch(
+    "/moderation/rules/{rule_id}",
+    response_model=dict,
+    summary="Update a moderation rule (admin/instructor)",
+    operation_id="moderation_rules_update",
+)
+async def update_moderation_rule(
+    rule_id: uuid.UUID,
+    body: dict,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    _require_admin_or_instructor(current_user)
+    import re as _re
+
+    from sqlalchemy import select
+
+    from app.modules.rag.models import ModerationRule
+    from app.modules.rag.moderator import invalidate_cache
+    from app.modules.rag.schemas import ModerationRuleOut, ModerationRuleUpdate
+
+    payload = ModerationRuleUpdate.model_validate(body)
+    rule = (await db.execute(select(ModerationRule).where(ModerationRule.id == rule_id))).scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    # Validate new regex if pattern is being updated
+    new_pattern = update_data.get("pattern", rule.pattern)
+    new_pattern_type = update_data.get("pattern_type", rule.pattern_type)
+    if "pattern" in update_data or "pattern_type" in update_data:
+        if new_pattern_type == "regex":
+            try:
+                _re.compile(new_pattern)
+            except _re.error as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid regex: {exc}")
+
+    for k, v in update_data.items():
+        setattr(rule, k, v)
+    await db.commit()
+    await db.refresh(rule)
+    await invalidate_cache()
+    return {"data": ModerationRuleOut.model_validate(rule).model_dump(mode="json")}
+
+
+@router.delete(
+    "/moderation/rules/{rule_id}",
+    response_model=dict,
+    summary="Delete a moderation rule (soft by default; ?hard=true requires admin)",
+    operation_id="moderation_rules_delete",
+)
+async def delete_moderation_rule(
+    rule_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    hard: bool = False,
+):
+    _require_admin_or_instructor(current_user)
+    from sqlalchemy import select
+
+    from app.modules.rag.models import ModerationRule
+    from app.modules.rag.moderator import invalidate_cache
+    rule = (await db.execute(select(ModerationRule).where(ModerationRule.id == rule_id))).scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    if hard:
+        _require_admin(current_user)  # hard delete: admin only
+        await db.delete(rule)
+    else:
+        rule.active = False
+    await db.commit()
+    await invalidate_cache()
+    return {"data": {"id": str(rule_id), "deleted": "hard" if hard else "soft"}}
