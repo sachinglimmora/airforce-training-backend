@@ -255,3 +255,38 @@ async def delete_moderation_rule(
     await db.commit()
     await invalidate_cache()
     return {"data": {"id": str(rule_id), "deleted": "hard" if hard else "soft"}}
+
+
+@router.get(
+    "/moderation/logs",
+    response_model=dict,
+    summary="List moderation log entries (admin/instructor audit view)",
+    operation_id="moderation_logs_list",
+)
+async def list_moderation_logs(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    category: str | None = None,
+    severity: str | None = None,
+    session_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    _require_admin_or_instructor(current_user)
+    from sqlalchemy import select
+
+    from app.modules.rag.models import ModerationLog
+    from app.modules.rag.schemas import ModerationLogOut
+    q = select(ModerationLog)
+    if category is not None:
+        q = q.where(ModerationLog.category == category)
+    if severity is not None:
+        q = q.where(ModerationLog.severity == severity)
+    if session_id is not None:
+        q = q.where(ModerationLog.session_id == session_id)
+    if user_id is not None:
+        q = q.where(ModerationLog.user_id == user_id)
+    q = q.order_by(ModerationLog.created_at.desc()).limit(limit).offset(offset)
+    rows = (await db.execute(q)).scalars().all()
+    return {"data": [ModerationLogOut.model_validate(r).model_dump(mode="json") for r in rows]}
