@@ -11,6 +11,26 @@ async def _fake_embed(texts, *args, **kwargs):
     return {"embeddings": [[0.1] * 1536 for _ in texts], "model": "x", "usage": {"total_tokens": 1}}
 
 
+async def _seed_classification_rule(db_session):
+    """Seed the SECRET// classification rule + invalidate the cache so the next
+    moderate() call picks it up. CI uses Base.metadata.create_all (not alembic),
+    so migration seed data isn't loaded."""
+    from app.modules.rag.models import ModerationRule
+    from app.modules.rag.moderator import invalidate_cache
+    rule = ModerationRule(
+        category="classification",
+        pattern=r"\bSECRET//\w+",
+        pattern_type="regex",
+        action="block",
+        severity="critical",
+        description="Test SECRET// marker",
+        active=True,
+    )
+    db_session.add(rule)
+    await db_session.commit()
+    await invalidate_cache()
+
+
 async def _ingest(db_session):
     source = await seed_synthetic_fcom(db_session)
     await db_session.commit()
@@ -36,6 +56,7 @@ async def test_moderation_blocks_classification_marker_in_response(client, db_se
     """End-to-end: AI emits a classification marker; moderator blocks; response shape reflects it."""
     await _ingest(db_session)
     real_user = await _make_test_user(db_session)
+    await _seed_classification_rule(db_session)
 
     # AI completion that emits a classification marker
     async def fake_complete(req, user_id):
