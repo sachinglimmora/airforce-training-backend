@@ -104,10 +104,12 @@ async def test_moderation_admin_create_rule_invalidates_cache_and_blocks_next_me
     from app.main import app
     from app.modules.auth.deps import get_current_user
     from app.modules.auth.schemas import CurrentUser
+    from app.modules.rag.moderator import invalidate_cache
     instructor_user = CurrentUser(id=str(real_user.id), roles=["instructor"], jti="")
     app.dependency_overrides[get_current_user] = lambda: instructor_user
 
     try:
+        await invalidate_cache()
         # Add a rule that bans the literal phrase 'WIDGET-X42'
         rule_body = {
             "category": "banned_phrase",
