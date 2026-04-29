@@ -58,7 +58,13 @@ async def _vector_search(
     out = []
     for row in result:
         d = dict(row._mapping)
-        d["embedding"] = list(d["embedding"])
+        raw = d["embedding"]
+        if isinstance(raw, str):
+            # pgvector via raw SQL returns "[0.1,0.2,...]" — parse to list[float].
+            d["embedding"] = [float(x) for x in raw.strip("[]").split(",") if x.strip()]
+        else:
+            # ORM-typed (numpy array, list, etc.) — coerce to plain list.
+            d["embedding"] = [float(x) for x in raw]
         d["score"] = float(d["cosine_score"])  # MMR + grounder expect 'score'
         out.append(d)
     return out
