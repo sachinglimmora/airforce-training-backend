@@ -85,3 +85,40 @@ def test_ungrounded_no_citations_no_check():
 def test_ungrounded_refused_state_no_check():
     out = _check_ungrounded("anything", "refused", ["FCOM-3.2.1"])
     assert out == []
+
+
+from app.modules.rag.moderator import _check_profanity
+
+
+def test_profanity_no_match_returns_text_unchanged():
+    rules = [_rule("profanity", "redact", "medium", r"\bdamn\b")]
+    redacted, viols = _check_profanity("clean engine start", rules)
+    assert redacted == "clean engine start"
+    assert viols == []
+
+
+def test_profanity_single_match_replaces_with_stars():
+    rules = [_rule("profanity", "redact", "medium", r"\bdamn\b")]
+    redacted, viols = _check_profanity("the damn engine", rules)
+    assert redacted == "the **** engine"
+    assert len(viols) == 1
+    assert viols[0].matched_text == "damn"
+
+
+def test_profanity_multiple_matches_all_redacted():
+    rules = [_rule("profanity", "redact", "medium", r"\bdamn\b")]
+    redacted, viols = _check_profanity("damn this damn engine", rules)
+    assert redacted == "**** this **** engine"
+    assert len(viols) == 2
+
+
+def test_profanity_multiple_rules_chained():
+    rules = [
+        _rule("profanity", "redact", "medium", r"\bdamn\b"),
+        _rule("profanity", "redact", "medium", r"\bhell\b"),
+    ]
+    redacted, viols = _check_profanity("damn hell yes", rules)
+    assert "*" in redacted
+    assert "damn" not in redacted
+    assert "hell" not in redacted
+    assert len(viols) == 2

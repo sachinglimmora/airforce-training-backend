@@ -88,6 +88,29 @@ def _check_ungrounded(text: str, grounded_state: str, citations: list[str]) -> l
     )]
 
 
+def _check_profanity(text: str, rules: list[CompiledRule]) -> tuple[str, list[Violation]]:
+    """Profanity detector — returns (redacted_text, violations).
+
+    Each match is replaced with '*' of equal length so the response stays the same shape.
+    """
+    violations: list[Violation] = []
+    redacted = text
+    for cr in rules:
+        def _replace(m: re.Match, _cr=cr) -> str:
+            violations.append(Violation(
+                category=_cr.category,
+                rule_id=_cr.rule_id,
+                matched_text=m.group(0),
+                action=_cr.action,
+                severity=_cr.severity,
+                start=m.start(),
+                end=m.end(),
+            ))
+            return "*" * len(m.group(0))
+        redacted = cr.compiled.sub(_replace, redacted)
+    return redacted, violations
+
+
 # Detector + orchestration functions defined in subsequent tasks
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
     raise NotImplementedError  # implemented in Task B8
