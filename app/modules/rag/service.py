@@ -150,7 +150,10 @@ class RAGService:
         # 6. Build messages and call gateway
         scores_by_key = {k: h.score for h in hits for k in h.citation_keys if h.included}
         aircraft_label = await self._aircraft_context_label(sess.aircraft_id)
-        sys_prompt = _system_prompt(getattr(user, "role", "trainee"), aircraft_label, soft=(decision["grounded"] == "soft"))
+        # Pick the most-privileged role from CurrentUser.roles (list[str]) for prompt selection.
+        user_roles = set(getattr(user, "roles", []))
+        primary_role = "instructor" if "instructor" in user_roles or "admin" in user_roles else "trainee"
+        sys_prompt = _system_prompt(primary_role, aircraft_label, soft=(decision["grounded"] == "soft"))
         messages = [{"role": "system", "content": sys_prompt}]
         for m in history:
             messages.append(m)

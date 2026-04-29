@@ -1,20 +1,23 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 from app.modules.rag.retriever import _vector_search
-from app.modules.rag.tasks import _embed_source_async
+from app.modules.rag.tasks import embed_source
 from tests.fixtures.synthetic_fcom import seed_synthetic_fcom
+
+
+async def _fake_embed(texts, *args, **kwargs):
+    return {"embeddings": [[0.1] * 1536 for _ in texts], "model": "x", "usage": {"total_tokens": 1}}
 
 
 async def test_vector_search_returns_chunks_with_scores(db_session):
     source = await seed_synthetic_fcom(db_session)
     await db_session.commit()
 
-    async def fake_embed(texts, *args, **kwargs):
-        return {"embeddings": [[0.1] * 1536 for _ in texts], "model": "x", "usage": {"total_tokens": 1}}
-
     with patch("app.modules.ai.service.AIService") as mock_ai:
-        mock_ai.return_value.embed = AsyncMock(side_effect=fake_embed)
-        await _embed_source_async(str(source.id))
+        mock_ai.return_value.embed = AsyncMock(side_effect=_fake_embed)
+        # Run ingestion in a thread so Celery's asyncio.run gets its own loop.
+        await asyncio.to_thread(embed_source, str(source.id))
 
     qvec = [0.1] * 1536
     rows = await _vector_search(db_session, qvec, top_k=5, aircraft_id=None)

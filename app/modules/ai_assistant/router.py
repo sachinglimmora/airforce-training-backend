@@ -114,7 +114,7 @@ async def send_message(
         ).model_dump(mode="json")
     }
 
-    if debug and current_user.role in ("admin", "instructor"):
+    if debug and (set(current_user.roles) & {"admin", "instructor"}):
         response["debug"] = {
             "original_query": body.content.strip(),
             "rewritten_query": result["rewritten_query"],

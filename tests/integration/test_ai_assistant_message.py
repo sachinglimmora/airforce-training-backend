@@ -1,10 +1,11 @@
+import asyncio
 import uuid
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import select
 
 from app.modules.content.models import ContentReference
-from app.modules.rag.tasks import _embed_source_async
+from app.modules.rag.tasks import embed_source
 from tests.fixtures.synthetic_fcom import seed_synthetic_fcom
 
 
@@ -24,7 +25,9 @@ async def _ingest(db_session):
     await db_session.commit()
     with patch("app.modules.ai.service.AIService") as mock_ai:
         mock_ai.return_value.embed = AsyncMock(side_effect=fake_embed_factory)
-        await _embed_source_async(str(source.id))
+        # Run via thread so Celery's asyncio.run gets its own loop, avoiding
+        # cross-loop conflicts with the global engine in app.database.
+        await asyncio.to_thread(embed_source, str(source.id))
     # Return the citation_keys produced by this seed for downstream assertions.
     refs = (await db_session.execute(
         select(ContentReference).where(ContentReference.source_id == source.id)
@@ -57,7 +60,7 @@ async def test_send_message_returns_grounded_answer(client, db_session):
         instance.complete = AsyncMock(side_effect=fake_complete)
         from app.modules.auth.schemas import CurrentUser
         mock_user.return_value = CurrentUser(
-            id=str(uuid.uuid4()), email="t@example.com", role="trainee"
+            id=str(uuid.uuid4()), roles=["trainee"], jti=""
         )
 
         resp = await client.post(

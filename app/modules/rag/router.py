@@ -33,7 +33,7 @@ async def rag_query(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if current_user.role not in ("admin", "instructor"):
+    if not (set(current_user.roles) & {"admin", "instructor"}):
         raise HTTPException(status_code=403, detail="Admin or instructor required")
     cfg = {
         "top_k": body.top_k or _settings.RAG_TOP_K,
