@@ -5,17 +5,15 @@ Revises: 65a9579c60af
 Create Date: 2026-04-29 18:13:59.333595
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = '64edd87f8670'
-down_revision: Union[str, None] = '65a9579c60af'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '65a9579c60af'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

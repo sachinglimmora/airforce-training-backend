@@ -1,9 +1,6 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-import pytest
-from sqlalchemy import select
-
 from app.modules.auth.models import User
 from app.modules.content.models import ContentSource
 
