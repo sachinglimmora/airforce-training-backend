@@ -53,6 +53,11 @@ class ContentSource(Base):
         default="draft",
         nullable=False,
     )
+    embedding_status: Mapped[str] = mapped_column(
+        Enum("pending", "succeeded", "failed", name="embedding_status"),
+        default="pending",
+        nullable=False,
+    )
     original_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
