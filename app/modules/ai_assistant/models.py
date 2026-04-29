@@ -26,6 +26,12 @@ class ChatSession(Base):
     last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False, index=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # F12 — Module Awareness
+    current_module_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    current_step_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    module_context_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    context_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.created_at"
     )

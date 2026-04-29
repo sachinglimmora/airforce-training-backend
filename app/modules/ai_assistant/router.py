@@ -16,6 +16,8 @@ from app.modules.rag.schemas import (
     AssistantMessage,
     ChatTurnResponse,
     CreateSessionRequest,
+    ModuleContextOut,
+    ModuleContextUpdate,
     SessionOut,
     SourceOut,
     UserMessage,
@@ -177,3 +179,87 @@ async def close_session(
     sess.closed_at = datetime.now(UTC)
     await db.commit()
     return {"data": {"message": "Session closed", "session_id": str(session_id)}}
+
+
+@router.put(
+    "/sessions/{session_id}/context",
+    response_model=dict,
+    summary="Update module context for a session",
+    description=(
+        "Set the trainee's current module/step context. "
+        "Auth: session owner, instructor, or admin."
+    ),
+    responses={
+        403: {"description": "Not the session owner or privileged role"},
+        404: {"description": "Session not found"},
+        413: {"description": "context_data exceeds 10KB"},
+    },
+    operation_id="ai_assistant_set_module_context",
+)
+async def set_module_context(
+    session_id: uuid.UUID,
+    body: ModuleContextUpdate,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
+    sess = result.scalar_one_or_none()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    user_roles = set(current_user.roles)
+    is_privileged = bool(user_roles & {"admin", "instructor"})
+    is_owner = str(sess.user_id) == str(current_user.id)
+    if not (is_owner or is_privileged):
+        raise HTTPException(status_code=403, detail="Not authorised to update this session")
+
+    sess.current_module_id = body.module_id
+    sess.current_step_id = body.step_id
+    sess.module_context_data = body.context_data
+    sess.context_updated_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(sess)
+
+    return {"data": ModuleContextOut(
+        session_id=sess.id,
+        module_id=sess.current_module_id,
+        step_id=sess.current_step_id,
+        context_data=sess.module_context_data,
+        context_updated_at=sess.context_updated_at,
+    ).model_dump(mode="json")}
+
+
+@router.get(
+    "/sessions/{session_id}/context",
+    response_model=dict,
+    summary="Get module context for a session",
+    description="Read current module/step context. Auth: session owner, instructor, or admin.",
+    responses={
+        403: {"description": "Not the session owner or privileged role"},
+        404: {"description": "Session not found"},
+    },
+    operation_id="ai_assistant_get_module_context",
+)
+async def get_module_context(
+    session_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
+    sess = result.scalar_one_or_none()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    user_roles = set(current_user.roles)
+    is_privileged = bool(user_roles & {"admin", "instructor"})
+    is_owner = str(sess.user_id) == str(current_user.id)
+    if not (is_owner or is_privileged):
+        raise HTTPException(status_code=403, detail="Not authorised to read this session")
+
+    return {"data": ModuleContextOut(
+        session_id=sess.id,
+        module_id=sess.current_module_id,
+        step_id=sess.current_step_id,
+        context_data=sess.module_context_data,
+        context_updated_at=sess.context_updated_at,
+    ).model_dump(mode="json")}

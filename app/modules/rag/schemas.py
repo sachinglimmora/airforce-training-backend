@@ -1,7 +1,8 @@
+import json as _json
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RagQueryRequest(BaseModel):
@@ -69,3 +70,41 @@ class SessionOut(BaseModel):
     status: str
     created_at: datetime
     last_activity_at: datetime
+
+
+# F12 — Module Awareness schemas
+class ModuleContextUpdate(BaseModel):
+    module_id: str | None = Field(default=None, max_length=128)
+    step_id: str | None = Field(default=None, max_length=128)
+    context_data: dict | None = None
+
+    @field_validator("context_data")
+    @classmethod
+    def context_data_size_limit(cls, v: dict | None) -> dict | None:
+        if v is not None and len(_json.dumps(v)) > 10_000:
+            raise ValueError("context_data exceeds 10KB limit")
+        return v
+
+
+class ModuleContextOut(BaseModel):
+    session_id: UUID
+    module_id: str | None
+    step_id: str | None
+    context_data: dict | None
+    context_updated_at: datetime | None
+
+
+# F3 — Explain-Why schemas
+class ExplainRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=2000)
+    context: str | None = None
+    system_state: dict | None = None
+    aircraft_id: UUID | None = None
+
+
+class ExplainResponse(BaseModel):
+    explanation: str
+    grounded: str  # strong | soft | refused | blocked
+    sources: list[SourceOut] = []
+    suggestions: list[SourceOut] = []
+    moderation: dict | None = None

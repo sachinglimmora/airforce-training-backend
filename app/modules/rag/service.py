@@ -1,5 +1,6 @@
 """RAG orchestration: rewrite -> retrieve -> ground -> AIService.complete -> persist."""
 
+import json
 import time
 from datetime import UTC, datetime
 from uuid import UUID
@@ -154,6 +155,20 @@ class RAGService:
         user_roles = set(getattr(user, "roles", []))
         primary_role = "instructor" if "instructor" in user_roles or "admin" in user_roles else "trainee"
         sys_prompt = _system_prompt(primary_role, aircraft_label, soft=(decision["grounded"] == "soft"))
+
+        # F12 — inject module context block when session has active module
+        if sess.current_module_id:
+            context_json = json.dumps(
+                sess.module_context_data or {}, separators=(",", ":")
+            )[:500]
+            module_block = (
+                f"\n\nThe trainee is currently working in module {sess.current_module_id},"
+                f" step {sess.current_step_id or '?'}.\n"
+                f"Context: {context_json}\n\n"
+                "Tailor your answer to this specific module/step where relevant."
+            )
+            sys_prompt = sys_prompt + "\n\n" + module_block
+
         messages = [{"role": "system", "content": sys_prompt}]
         for m in history:
             messages.append(m)
