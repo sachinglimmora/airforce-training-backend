@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     # Chat session
     CHAT_SESSION_AUTO_CLOSE_DAYS: int = 30
 
+    # ─── Moderation ─────────────────────────────────────────────────────────
+    MODERATION_ENABLED: bool = True
+    MODERATION_CACHE_TTL_S: int = 60
+    MODERATION_FAIL_OPEN: bool = True
+    MODERATION_LOG_TRUNCATE_RESPONSE: int = 4000
+    MODERATION_LOG_TRUNCATE_MATCH: int = 500
+
     # MinIO
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = ""
