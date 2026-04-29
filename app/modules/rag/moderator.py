@@ -50,6 +50,23 @@ class ModerationResult:
     all: list[Violation] = field(default_factory=list)
 
 
+def _check_pattern_category(text: str, rules: list[CompiledRule]) -> list[Violation]:
+    """Generic pattern detector — used for both classification and banned_phrase categories."""
+    violations: list[Violation] = []
+    for cr in rules:
+        for match in cr.compiled.finditer(text):
+            violations.append(Violation(
+                category=cr.category,
+                rule_id=cr.rule_id,
+                matched_text=match.group(0),
+                action=cr.action,
+                severity=cr.severity,
+                start=match.start(),
+                end=match.end(),
+            ))
+    return violations
+
+
 # Detector + orchestration functions defined in subsequent tasks
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
     raise NotImplementedError  # implemented in Task B8
