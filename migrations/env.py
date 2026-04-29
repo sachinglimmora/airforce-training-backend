@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import app.modules.ai_assistant.models  # noqa: F401
 import app.modules.analytics.models  # noqa: F401
 import app.modules.assets.models  # noqa: F401
 import app.modules.audit.models  # noqa: F401
@@ -15,6 +16,7 @@ import app.modules.checklist.models  # noqa: F401
 import app.modules.competency.models  # noqa: F401
 import app.modules.content.models  # noqa: F401
 import app.modules.procedures.models  # noqa: F401
+import app.modules.rag.models  # noqa: F401
 import app.modules.scenarios.models  # noqa: F401
 import app.modules.vr_telemetry.models  # noqa: F401
 from app.config import get_settings
