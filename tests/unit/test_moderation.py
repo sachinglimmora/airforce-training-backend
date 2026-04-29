@@ -52,3 +52,36 @@ def test_pattern_multiple_rules_same_text():
 
 def test_pattern_empty_rules_list():
     assert _check_pattern_category("anything", []) == []
+
+
+from app.modules.rag.moderator import _check_ungrounded
+
+
+def test_ungrounded_strong_with_brackets_returns_empty():
+    out = _check_ungrounded("Per [FCOM-3.2.1], engine start...", "strong", ["FCOM-3.2.1"])
+    assert out == []
+
+
+def test_ungrounded_strong_without_brackets_returns_block_violation():
+    out = _check_ungrounded("Engine starts when you press the button.", "strong", ["FCOM-3.2.1"])
+    assert len(out) == 1
+    v = out[0]
+    assert v.category == "ungrounded"
+    assert v.action == "block"
+    assert v.severity == "high"
+    assert v.rule_id is None
+
+
+def test_ungrounded_soft_grounding_no_check():
+    out = _check_ungrounded("Engine starts.", "soft", ["FCOM-3.2.1"])
+    assert out == []
+
+
+def test_ungrounded_no_citations_no_check():
+    out = _check_ungrounded("anything", "strong", [])
+    assert out == []
+
+
+def test_ungrounded_refused_state_no_check():
+    out = _check_ungrounded("anything", "refused", ["FCOM-3.2.1"])
+    assert out == []

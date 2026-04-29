@@ -67,6 +67,27 @@ def _check_pattern_category(text: str, rules: list[CompiledRule]) -> list[Violat
     return violations
 
 
+def _check_ungrounded(text: str, grounded_state: str, citations: list[str]) -> list[Violation]:
+    """Heuristic: when grounded='strong', the response must contain at least one [citation_key].
+
+    Skipped for 'soft' (already caveated) and 'refused' (no LLM response to check).
+    """
+    if grounded_state != "strong" or not citations:
+        return []
+    refs_found = _CITATION_RE.findall(text)
+    if refs_found:
+        return []
+    return [Violation(
+        category="ungrounded",
+        rule_id=None,
+        matched_text="",
+        action="block",
+        severity="high",
+        start=0,
+        end=0,
+    )]
+
+
 # Detector + orchestration functions defined in subsequent tasks
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
     raise NotImplementedError  # implemented in Task B8
