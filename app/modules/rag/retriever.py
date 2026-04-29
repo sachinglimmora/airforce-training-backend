@@ -109,6 +109,7 @@ async def retrieve(
 ) -> tuple[list[Hit], dict]:
     """Embed query, vector search, MMR diversify, return Hit list + latency dict."""
     import time
+
     from app.modules.rag.embedder import embed_and_validate
 
     cfg = cfg or {

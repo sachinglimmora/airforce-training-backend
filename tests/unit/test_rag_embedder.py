@@ -1,7 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.modules.rag.embedder import EmbedDimensionMismatch, embed_and_validate
+import pytest
+
+from app.modules.rag.embedder import EmbedDimensionMismatchError, embed_and_validate
 
 
 def _make_session_factory_mock(db_mock=None):
@@ -45,5 +46,5 @@ async def test_embed_and_validate_raises_on_dim_mismatch():
 
     with patch("app.database.AsyncSessionLocal", session_factory), \
          patch("app.modules.ai.service.AIService", return_value=ai_instance):
-        with pytest.raises(EmbedDimensionMismatch):
+        with pytest.raises(EmbedDimensionMismatchError):
             await embed_and_validate(["foo"])

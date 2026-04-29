@@ -1,4 +1,3 @@
-import math
 
 from app.modules.rag.retriever import _mmr_rerank
 

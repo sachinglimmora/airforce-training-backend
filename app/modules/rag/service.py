@@ -1,7 +1,6 @@
 """RAG orchestration: rewrite -> retrieve -> ground -> AIService.complete -> persist."""
 
 import time
-import uuid
 from datetime import UTC, datetime
 from uuid import UUID
 

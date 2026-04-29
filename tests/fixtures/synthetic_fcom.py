@@ -43,7 +43,6 @@ async def seed_synthetic_fcom(db: AsyncSession, aircraft_id: uuid.UUID | None = 
          "SYN-FCOM-4", 200),
     ]
 
-    parent_section = None
     for sec_num, title, ordinal, _parent_idx, body, citation_key, page in sections_data:
         section = ContentSection(
             id=uuid.uuid4(),

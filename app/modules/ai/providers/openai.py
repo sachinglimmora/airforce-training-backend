@@ -38,7 +38,7 @@ class OpenAIProvider:
         usage = response.usage
         prompt_tokens = usage.prompt_tokens if usage else 0
         completion_tokens = usage.completion_tokens if usage else 0
-        cost = (prompt_tokens * 0.000005 + completion_tokens * 0.000015)
+        cost = prompt_tokens * 0.000005 + completion_tokens * 0.000015
 
         log.info("openai_complete", elapsed_ms=elapsed_ms, model=self._DEFAULT_MODEL)
         return CompletionResponse(
@@ -61,10 +61,14 @@ class OpenAIProvider:
 
     async def health_check(self) -> ProviderHealth:
         import httpx
+
         start = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"})
+                r = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                )
             elapsed = int((time.monotonic() - start) * 1000)
             return ProviderHealth(name=self.name, healthy=r.status_code < 500, latency_ms=elapsed)
         except Exception as e:

@@ -1,8 +1,5 @@
-import asyncio
 import uuid
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 from app.modules.rag.tasks import _embed_source_async
 from tests.fixtures.synthetic_fcom import seed_synthetic_fcom
@@ -12,8 +9,8 @@ async def _ingest(db_session):
     source = await seed_synthetic_fcom(db_session)
     await db_session.commit()
     fake = {"embeddings": [[0.1] * 1536] * 50, "model": "x", "usage": {"total_tokens": 1}}
-    with patch("app.modules.ai.service.AIService") as MockAI:
-        MockAI.return_value.embed = AsyncMock(return_value=fake)
+    with patch("app.modules.ai.service.AIService") as mock_ai:
+        mock_ai.return_value.embed = AsyncMock(return_value=fake)
         await _embed_source_async(str(source.id))
 
 
@@ -28,11 +25,11 @@ async def test_send_message_returns_grounded_answer(client, db_session):
     }
     fake_embed = {"embeddings": [[0.1] * 1536], "model": "x", "usage": {"total_tokens": 1}}
 
-    with patch("app.modules.rag.embedder.AIService") as MockEmb, \
-         patch("app.modules.rag.service.AIService") as MockComplete, \
+    with patch("app.modules.rag.embedder.AIService") as mock_emb, \
+         patch("app.modules.rag.service.AIService") as mock_complete, \
          patch("app.modules.auth.deps.get_current_user") as mock_user:
-        MockEmb.return_value.embed = AsyncMock(return_value=fake_embed)
-        MockComplete.return_value.complete = AsyncMock(return_value=fake_complete)
+        mock_emb.return_value.embed = AsyncMock(return_value=fake_embed)
+        mock_complete.return_value.complete = AsyncMock(return_value=fake_complete)
         from app.modules.auth.schemas import CurrentUser
         mock_user.return_value = CurrentUser(id=str(uuid.uuid4()), email="t@example.com", role="trainee")
 

@@ -1,6 +1,5 @@
 """Section tree -> ContentChunk records (3-rule hybrid). See spec §7."""
 
-from dataclasses import dataclass, field
 
 import tiktoken
 from langchain_text_splitters import RecursiveCharacterTextSplitter

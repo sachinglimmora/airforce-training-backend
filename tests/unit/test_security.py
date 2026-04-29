@@ -1,5 +1,11 @@
 import pytest
-from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
+
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 
 
 def test_password_hashing():
@@ -18,8 +24,10 @@ def test_access_token_roundtrip():
 
 
 def test_token_expired(monkeypatch):
-    import jwt
     from datetime import UTC, datetime, timedelta
+
+    import jwt
+
     from app.core.security import _load_private_key
 
     payload = {

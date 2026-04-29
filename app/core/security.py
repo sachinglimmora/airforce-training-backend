@@ -1,6 +1,6 @@
 import hashlib
-import os
 import secrets
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,37 +21,71 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-def _load_private_key() -> str:
-    path = Path(settings.JWT_PRIVATE_KEY_PATH)
-    if path.exists():
-        return path.read_text()
-    # Dev fallback: generate ephemeral key (NOT for production)
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
+_ephemeral_store: dict[str, str] = {}
 
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    _ephemeral_store["private"] = private_key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.TraditionalOpenSSL,
-        serialization.NoEncryption(),
-    ).decode()
-    _ephemeral_store["public"] = private_key.public_key().public_bytes(
-        serialization.Encoding.PEM,
-        serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
-    return _ephemeral_store["private"]
+
+_key_lock = threading.Lock()
+
+
+def _load_private_key() -> str:
+    priv_path = Path(settings.JWT_PRIVATE_KEY_PATH)
+    if priv_path.exists():
+        return priv_path.read_text()
+
+    with _key_lock:
+        # Re-check inside lock in case another thread just wrote it
+        if priv_path.exists():
+            return priv_path.read_text()
+        if "private" in _ephemeral_store:
+            return _ephemeral_store["private"]
+
+        import warnings
+
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        warnings.warn(
+            f"JWT key file not found at {priv_path}. Generating and persisting an ephemeral "
+            "key pair. This is safe for dev but MUST be replaced with a real key in production.",
+            stacklevel=2,
+        )
+
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        priv_pem = private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        ).decode()
+        pub_pem = (
+            private_key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+
+        # Persist to the configured paths so all workers share the same key pair
+        try:
+            priv_path.parent.mkdir(parents=True, exist_ok=True)
+            priv_path.write_text(priv_pem)
+            Path(settings.JWT_PUBLIC_KEY_PATH).write_text(pub_pem)
+        except OSError:
+            # Read-only filesystem (e.g. some container setups) — fall back to in-memory
+            pass
+
+        _ephemeral_store["private"] = priv_pem
+        _ephemeral_store["public"] = pub_pem
+        return priv_pem
 
 
 def _load_public_key() -> str:
-    path = Path(settings.JWT_PUBLIC_KEY_PATH)
-    if path.exists():
-        return path.read_text()
+    pub_path = Path(settings.JWT_PUBLIC_KEY_PATH)
+    if pub_path.exists():
+        return pub_path.read_text()
     if "public" not in _ephemeral_store:
         _load_private_key()
     return _ephemeral_store["public"]
-
-
-_ephemeral_store: dict[str, str] = {}
 
 
 def create_access_token(user_id: str, roles: list[str]) -> str:
@@ -85,13 +119,17 @@ def hash_token(token: str) -> str:
 
 
 def get_jwks() -> dict:
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.serialization import load_pem_public_key
     import base64
+
+    from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
     pub_pem = _load_public_key().encode()
     pub_key = load_pem_public_key(pub_pem)
-    pub_numbers = pub_key.public_key().public_numbers() if hasattr(pub_key, "public_key") else pub_key.public_numbers()
+    pub_numbers = (
+        pub_key.public_key().public_numbers()
+        if hasattr(pub_key, "public_key")
+        else pub_key.public_numbers()
+    )
 
     def int_to_base64url(n: int) -> str:
         length = (n.bit_length() + 7) // 8

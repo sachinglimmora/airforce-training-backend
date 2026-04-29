@@ -1,4 +1,5 @@
 """Audit middleware — logs sensitive endpoint access to the audit_log table."""
+
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -40,6 +41,7 @@ def _resolve_action(method: str, path: str) -> str | None:
 def _extract_user_id(request: Request) -> str | None:
     try:
         from app.core.security import decode_access_token
+
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             payload = decode_access_token(auth[7:])

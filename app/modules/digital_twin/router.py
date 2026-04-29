@@ -44,7 +44,13 @@ async def list_systems(
     systems = result.scalars().all()
     return {
         "data": [
-            {"id": str(s.id), "name": s.name, "category": s.category, "status": s.status, "health": s.health}
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "category": s.category,
+                "status": s.status,
+                "health": s.health,
+            }
             for s in systems
         ]
     }
@@ -68,7 +74,13 @@ async def get_system(
     if not system:
         raise HTTPException(status_code=404, detail="System not found")
     return {
-        "data": {"id": str(system.id), "name": system.name, "category": system.category, "status": system.status, "health": system.health}
+        "data": {
+            "id": str(system.id),
+            "name": system.name,
+            "category": system.category,
+            "status": system.status,
+            "health": system.health,
+        }
     }
 
 
@@ -146,13 +158,19 @@ async def update_component(
     return {
         "data": {
             "system": {
-                "id": str(system.id), "name": system.name,
-                "category": system.category, "status": system.status, "health": system.health,
+                "id": str(system.id),
+                "name": system.name,
+                "category": system.category,
+                "status": system.status,
+                "health": system.health,
             },
             "component": {
-                "id": str(component.id), "name": component.name,
-                "partNumber": component.part_number, "description": component.description,
-                "status": component.status, "health": component.health,
+                "id": str(component.id),
+                "name": component.name,
+                "partNumber": component.part_number,
+                "description": component.description,
+                "status": component.status,
+                "health": component.health,
             },
         }
     }

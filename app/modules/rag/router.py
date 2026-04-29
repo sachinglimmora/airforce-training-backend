@@ -4,13 +4,13 @@ from fastapi import Depends, HTTPException
 from fastapi.routing import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
 from app.modules.rag.grounder import decide
 from app.modules.rag.retriever import retrieve
 from app.modules.rag.schemas import HitOut, RagQueryRequest, RagQueryResponse
-from app.config import get_settings
 
 router = APIRouter()
 _settings = get_settings()

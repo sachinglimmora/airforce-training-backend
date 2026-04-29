@@ -1,8 +1,7 @@
 import asyncio
 import uuid
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
-import pytest
 from sqlalchemy import select
 
 from app.modules.content.models import ContentSource
@@ -16,8 +15,8 @@ async def test_embed_source_creates_chunks(db_session):
     await db_session.commit()
 
     fake_embeddings = {"embeddings": [[0.1] * 1536] * 50, "model": "text-embedding-3-small", "usage": {"total_tokens": 100}}
-    with patch("app.modules.ai.service.AIService") as MockAI:
-        instance = MockAI.return_value
+    with patch("app.modules.ai.service.AIService") as mock_ai:
+        instance = mock_ai.return_value
         instance.embed = AsyncMock(return_value=fake_embeddings)
         await asyncio.to_thread(embed_source, str(source.id))
 

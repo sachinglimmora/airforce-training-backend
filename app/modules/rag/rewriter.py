@@ -6,7 +6,6 @@ import structlog
 
 from app.config import get_settings
 from app.database import AsyncSessionLocal
-from app.modules.ai.providers.base import CompletionRequest as ProviderCompletionReq, Message
 from app.modules.ai.service import AIService
 from app.modules.rag.prompts import REWRITER_PROMPT
 

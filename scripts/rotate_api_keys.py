@@ -7,6 +7,7 @@ Usage:
     python -m scripts.rotate_api_keys --provider gemini
     python -m scripts.rotate_api_keys --provider openai
 """
+
 import argparse
 import sys
 from pathlib import Path

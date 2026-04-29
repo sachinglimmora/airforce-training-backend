@@ -4,6 +4,7 @@ from fastapi import Depends, File, Form, Query, UploadFile
 from fastapi.routing import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import require_permission
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
@@ -46,6 +47,7 @@ async def list_sources(
     "/sources",
     status_code=202,
     response_model=dict,
+    dependencies=[require_permission("content", "create")],
     summary="Upload and parse a source document",
     description=(
         "Upload a PDF or DOCX document for async parsing. "
@@ -63,7 +65,11 @@ async def list_sources(
         "- `effective_date` (optional) — ISO date, e.g. `2026-01-15`\n\n"
         "**Required permission:** `content:create`"
     ),
-    responses={**_401, **_403, 400: {"description": "Unsupported file type or malformed form data"}},
+    responses={
+        **_401,
+        **_403,
+        400: {"description": "Unsupported file type or malformed form data"},
+    },
     operation_id="content_sources_upload",
 )
 async def upload_source(
@@ -76,8 +82,9 @@ async def upload_source(
     current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
-    from app.modules.content.schemas import UploadSourceRequest
     from datetime import date
+
+    from app.modules.content.schemas import UploadSourceRequest
 
     data = UploadSourceRequest(
         source_type=source_type,
@@ -89,7 +96,9 @@ async def upload_source(
     file_bytes = await file.read()
     svc = ContentService(db)
     source, job_id = await svc.create_source(data, file_bytes, current_user.id)
-    return {"data": IngestionJobOut(source_id=source.id, status="parsing", job_id=job_id).model_dump()}
+    return {
+        "data": IngestionJobOut(source_id=source.id, status="parsing", job_id=job_id).model_dump()
+    }
 
 
 @router.get(
@@ -144,7 +153,9 @@ async def get_source_tree(
             "citation_key": citation_key,
             "page_number": sec.page_number,
             "content_markdown": sec.content_markdown,
-            "children": [_serialize_section(c) for c in sorted(sec.children, key=lambda x: x.ordinal)],
+            "children": [
+                _serialize_section(c) for c in sorted(sec.children, key=lambda x: x.ordinal)
+            ],
         }
 
     root_sections = [s for s in src.sections if s.parent_section_id is None]
@@ -153,7 +164,9 @@ async def get_source_tree(
             "source_id": str(src.id),
             "source_type": src.source_type,
             "version": src.version,
-            "sections": [_serialize_section(s) for s in sorted(root_sections, key=lambda x: x.ordinal)],
+            "sections": [
+                _serialize_section(s) for s in sorted(root_sections, key=lambda x: x.ordinal)
+            ],
         }
     }
 
@@ -161,6 +174,7 @@ async def get_source_tree(
 @router.post(
     "/sources/{source_id}/approve",
     response_model=dict,
+    dependencies=[require_permission("content", "approve")],
     summary="Approve a content source for use",
     description=(
         "Marks the source as `approved`, making it visible to trainees and instructors. "
@@ -211,6 +225,7 @@ async def reembed_source_endpoint(
 @router.post(
     "/sources/{source_id}/archive",
     response_model=dict,
+    dependencies=[require_permission("content", "update")],
     summary="Archive a content source",
     description=(
         "Moves the source to `archived` status. Archived sources are hidden from normal reads "

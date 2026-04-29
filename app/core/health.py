@@ -1,6 +1,7 @@
-from app.database import engine
-from app.config import get_settings
 import redis.asyncio as aioredis
+
+from app.config import get_settings
+from app.database import engine
 
 settings = get_settings()
 

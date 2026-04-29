@@ -1,7 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.modules.rag.rewriter import rewrite, _has_anaphora, _needs_rewrite
+from app.modules.rag.rewriter import _has_anaphora, _needs_rewrite, rewrite
 
 
 def _make_session_factory_mock():

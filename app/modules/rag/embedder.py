@@ -5,12 +5,12 @@ from app.config import get_settings
 _settings = get_settings()
 
 
-class EmbedDimensionMismatch(Exception):
+class EmbedDimensionMismatchError(Exception):
     pass
 
 
 async def embed_and_validate(texts: list[str]) -> list[list[float]]:
-    """Embed texts via the AI gateway. Raises EmbedDimensionMismatch on dim mismatch."""
+    """Embed texts via the AI gateway. Raises EmbedDimensionMismatchError on dim mismatch."""
     from app.database import AsyncSessionLocal
     from app.modules.ai.service import AIService
 
@@ -21,7 +21,7 @@ async def embed_and_validate(texts: list[str]) -> list[list[float]]:
     embeddings = result["embeddings"]
     for i, vec in enumerate(embeddings):
         if len(vec) != _settings.EMBEDDING_DIM:
-            raise EmbedDimensionMismatch(
+            raise EmbedDimensionMismatchError(
                 f"Expected dim={_settings.EMBEDDING_DIM}, got dim={len(vec)} "
                 f"from model={result['model']}, text index {i}"
             )

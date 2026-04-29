@@ -1,8 +1,7 @@
 from collections.abc import Callable
-from functools import wraps
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends
 
 from app.core.exceptions import Forbidden
 from app.modules.auth.deps import get_current_user
@@ -83,6 +82,18 @@ def get_user_permissions(roles: list[str]) -> set[str]:
     for role in roles:
         perms |= ROLE_PERMISSIONS.get(role, set())
     return perms
+
+
+def require_admin() -> "Depends":
+    """Dependency that allows only users with the admin role."""
+    from fastapi import Depends as _Depends
+
+    async def check(current_user: Annotated[CurrentUser, Depends(get_current_user)]):
+        if "admin" not in current_user.roles:
+            raise Forbidden("Admin role required")
+        return current_user
+
+    return _Depends(check)
 
 
 def require_permission(resource: str, action: str) -> Callable:

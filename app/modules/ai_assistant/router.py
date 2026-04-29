@@ -13,8 +13,12 @@ from app.modules.ai_assistant.models import ChatMessage, ChatSession
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
 from app.modules.rag.schemas import (
-    AssistantMessage, ChatTurnResponse, CreateSessionRequest, SessionOut,
-    SourceOut, UserMessage,
+    AssistantMessage,
+    ChatTurnResponse,
+    CreateSessionRequest,
+    SessionOut,
+    SourceOut,
+    UserMessage,
 )
 from app.modules.rag.service import RAGService
 

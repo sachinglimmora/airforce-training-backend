@@ -52,8 +52,9 @@ class UserMessage(BaseModel):
 
 
 class ChatTurnResponse(BaseModel):
-    userMessage: UserMessage
-    assistantMessage: AssistantMessage
+    # camelCase intentional: matches the frontend chat-UI contract per spec §12.
+    userMessage: UserMessage  # noqa: N815
+    assistantMessage: AssistantMessage  # noqa: N815
 
 
 class CreateSessionRequest(BaseModel):

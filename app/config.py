@@ -8,7 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    ENV: Literal["local", "development", "staging", "production"] = "local"
+    ENV: Literal["local", "development", "staging", "production", "test"] = "local"
+
     LOG_LEVEL: str = "INFO"
 
     # Database
@@ -71,6 +72,7 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = ""
     MINIO_SECRET_KEY: str = ""
     MINIO_BUCKET_ASSETS: str = "aegis-assets"
+    MINIO_BUCKET_CONTENT: str = "aegis-content"
     MINIO_SECURE: bool = False
 
     # CORS

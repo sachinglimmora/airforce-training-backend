@@ -1,10 +1,8 @@
-import uuid
-
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import Conflict, Forbidden, NotFound
+from app.core.exceptions import Conflict, NotFound
 from app.core.security import hash_password
 from app.modules.auth.models import Permission, Role, User, UserRole
 
@@ -15,7 +13,13 @@ class UsersService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_users(self, role: str | None = None, status: str | None = None, limit: int = 50, cursor: str | None = None) -> list[User]:
+    async def list_users(
+        self,
+        role: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[User]:
         q = select(User).where(User.deleted_at.is_(None))
         if status:
             q = q.where(User.status == status)
@@ -67,6 +71,7 @@ class UsersService:
 
     async def delete_user(self, user_id: str) -> None:
         from datetime import UTC, datetime
+
         user = await self.get_user(user_id)
         user.deleted_at = datetime.now(UTC)
 

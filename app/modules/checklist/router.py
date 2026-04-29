@@ -39,7 +39,9 @@ class ItemActionRequest(BaseModel):
 )
 async def list_checklists(
     aircraft_id: str | None = Query(None, description="Filter by aircraft UUID"),
-    phase: str | None = Query(None, description="pre-flight | takeoff | cruise | approach | landing | shutdown"),
+    phase: str | None = Query(
+        None, description="pre-flight | takeoff | cruise | approach | landing | shutdown"
+    ),
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
 ):
@@ -73,6 +75,7 @@ async def get_checklist(
     cl = result.scalar_one_or_none()
     if not cl:
         from app.core.exceptions import NotFound
+
         raise NotFound("Checklist")
     return {
         "data": {
@@ -197,7 +200,7 @@ async def call_item(
     description=(
         "Records the response to a previously called item. "
         "In `challenge_response` mode this is the Pilot Flying reading the response aloud.\n\n"
-        "Body: `{ \"response\": \"SET\" }` — the actual response text spoken by the trainee."
+        'Body: `{ "response": "SET" }` — the actual response text spoken by the trainee.'
     ),
     responses={**_401},
     operation_id="checklists_respond_item",
@@ -218,7 +221,14 @@ async def respond_item(
     )
     db.add(event)
     await db.commit()
-    return {"data": {"session_id": session_id, "item_id": item_id, "response": body.response, "status": "responded"}}
+    return {
+        "data": {
+            "session_id": session_id,
+            "item_id": item_id,
+            "response": body.response,
+            "status": "responded",
+        }
+    }
 
 
 @router.post(
@@ -238,14 +248,52 @@ async def complete_session(
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    import json
     from datetime import UTC, datetime
+
+    from app.modules.analytics.models import SessionEvent
 
     result = await db.execute(select(ChecklistSession).where(ChecklistSession.id == session_id))
     session = result.scalar_one_or_none()
-    if session:
-        session.status = "completed"
-        session.ended_at = datetime.now(UTC)
-    return {"data": {"session_id": session_id, "status": "completed"}}
+    if not session:
+        from app.core.exceptions import NotFound
+
+        raise NotFound("Checklist session")
+
+    # Load the checklist to know total items and which are critical
+    cl_result = await db.execute(select(Checklist).where(Checklist.id == session.checklist_id))
+    cl = cl_result.scalar_one_or_none()
+
+    events_result = await db.execute(
+        select(SessionEvent).where(SessionEvent.session_id == session_id)
+    )
+    events = events_result.scalars().all()
+
+    responded_ids = {
+        e.payload.get("item_id")
+        for e in events
+        if e.event_type == "checklist_item_responded" and e.payload.get("item_id")
+    }
+
+    total = len(cl.items) if cl else 0
+    critical_ids = {str(item.id) for item in cl.items if item.is_critical} if cl else set()
+    critical_missed = critical_ids - responded_ids
+    responded = len(responded_ids & {str(i.id) for i in cl.items}) if cl else 0
+    compliance_pct = round(responded / total * 100, 1) if total else 0.0
+
+    score = {
+        "total_items": total,
+        "responded": responded,
+        "compliance_pct": compliance_pct,
+        "critical_items": len(critical_ids),
+        "critical_missed": len(critical_missed),
+    }
+
+    session.status = "completed"
+    session.ended_at = datetime.now(UTC)
+    session.score_json = json.dumps(score)
+
+    return {"data": {"session_id": session_id, "status": "completed", "score": score}}
 
 
 @router.get(
@@ -265,12 +313,16 @@ async def get_session(
     session = result.scalar_one_or_none()
     if not session:
         from app.core.exceptions import NotFound
+
         raise NotFound("Checklist session")
+    import json
+
     return {
         "data": {
             "session_id": str(session.id),
             "status": session.status,
             "started_at": session.started_at.isoformat(),
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
+            "score": json.loads(session.score_json) if session.score_json else None,
         }
     }

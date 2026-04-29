@@ -1,4 +1,7 @@
-from app.modules.rag.chunker import count_tokens
+from dataclasses import dataclass, field
+from uuid import uuid4
+
+from app.modules.rag.chunker import chunk_section_tree, count_tokens
 
 
 def test_count_tokens_returns_zero_for_empty():
@@ -11,12 +14,6 @@ def test_count_tokens_returns_positive_for_text():
 
 def test_count_tokens_grows_with_length():
     assert count_tokens("a b c d e f g h") > count_tokens("a b")
-
-
-from dataclasses import dataclass, field
-from uuid import uuid4
-
-from app.modules.rag.chunker import chunk_section_tree
 
 
 @dataclass

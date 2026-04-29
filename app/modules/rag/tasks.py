@@ -3,7 +3,6 @@
 import asyncio
 
 import structlog
-from celery import group
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -148,8 +147,9 @@ async def _auto_close_idle_sessions_async() -> int:
     from datetime import UTC, datetime, timedelta
     cutoff = datetime.now(UTC) - timedelta(days=_settings.CHAT_SESSION_AUTO_CLOSE_DAYS)
     async with AsyncSessionLocal() as db:
-        from app.modules.ai_assistant.models import ChatSession
         from sqlalchemy import update
+
+        from app.modules.ai_assistant.models import ChatSession
         result = await db.execute(
             update(ChatSession)
             .where(ChatSession.status == "active", ChatSession.last_activity_at < cutoff)

@@ -94,8 +94,7 @@ async def upload_video(
     response_model=dict,
     summary="Assign a video to a trainee",
     description=(
-        "Makes a video visible to a specific trainee.\n\n"
-        "Body: `{ \"trainee_id\": \"uuid\" }`"
+        'Makes a video visible to a specific trainee.\n\nBody: `{ "trainee_id": "uuid" }`'
     ),
     responses={**_401, **_404},
     operation_id="instructor_videos_assign",

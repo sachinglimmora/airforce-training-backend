@@ -11,7 +11,9 @@ async def test_health(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_invalid_credentials(client: AsyncClient):
-    r = await client.post("/api/v1/auth/login", json={"email": "nobody@example.com", "password": "wrong"})
+    r = await client.post(
+        "/api/v1/auth/login", json={"email": "nobody@example.com", "password": "wrong"}
+    )
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "INVALID_CREDENTIALS"
 

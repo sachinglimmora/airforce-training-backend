@@ -8,7 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
-_now = lambda: datetime.now(UTC)
+
+def _now():
+    return datetime.now(UTC)
 
 
 class ContentChunk(Base):

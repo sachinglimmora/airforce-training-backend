@@ -6,13 +6,14 @@ from fastapi.routing import APIRouter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import require_admin
 from app.database import get_db
 from app.modules.audit.models import AuditLog
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.models import Role
 from app.modules.auth.schemas import CurrentUser
 
-router = APIRouter()
+router = APIRouter(dependencies=[require_admin()])
 
 _401 = {401: {"description": "Not authenticated"}}
 _403 = {403: {"description": "Admin role required"}}
@@ -41,9 +42,24 @@ async def get_dashboard(
             "totalInstructors": 15,
             "recentAuditLogs": [],
             "systemStatus": [
-                {"service": "API",      "status": "operational", "uptime": "99.9%", "lastChecked": datetime.now(UTC).isoformat()},
-                {"service": "Database", "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
-                {"service": "Redis",    "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
+                {
+                    "service": "API",
+                    "status": "operational",
+                    "uptime": "99.9%",
+                    "lastChecked": datetime.now(UTC).isoformat(),
+                },
+                {
+                    "service": "Database",
+                    "status": "operational",
+                    "uptime": "100%",
+                    "lastChecked": datetime.now(UTC).isoformat(),
+                },
+                {
+                    "service": "Redis",
+                    "status": "operational",
+                    "uptime": "100%",
+                    "lastChecked": datetime.now(UTC).isoformat(),
+                },
             ],
             "charts": {
                 "trainingCompletion": [],
@@ -69,7 +85,11 @@ async def get_roles(
 ):
     result = await db.execute(select(Role))
     roles = result.scalars().all()
-    return {"data": [{"id": str(r.id), "name": r.name, "userCount": 0, "permissions": []} for r in roles]}
+    return {
+        "data": [
+            {"id": str(role.id), "name": role.name, "userCount": 0, "permissions": []} for role in roles
+        ]
+    }
 
 
 @router.post(
@@ -79,7 +99,7 @@ async def get_roles(
     description=(
         "Creates a custom role. After creation, assign permissions via "
         "`POST /users/{id}/roles`.\n\n"
-        "Body: `{ \"name\": \"safety_officer\", \"description\": \"...\" }`"
+        'Body: `{ "name": "safety_officer", "description": "..." }`'
     ),
     responses={**_401, **_403, 409: {"description": "Role name already exists"}},
     operation_id="admin_roles_create",
@@ -111,7 +131,7 @@ async def create_role(
 async def get_audit_logs(
     db: Annotated[AsyncSession, Depends(get_db)],
     _module: str | None = Query(None, description="Filter by resource_type e.g. users, content"),
-    _userId: str | None = Query(None, description="Filter by actor user UUID"),
+    user_id: str | None = Query(None, alias="userId", description="Filter by actor user UUID"),
     limit: int = Query(50, description="Page size"),
     offset: int = Query(0, description="Page offset"),
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
@@ -124,15 +144,15 @@ async def get_audit_logs(
             "total": 100,
             "logs": [
                 {
-                    "id": str(l.id),
-                    "userId": str(l.actor_user_id),
-                    "action": l.action,
-                    "module": l.resource_type,
-                    "details": str(l.metadata_json),
-                    "timestamp": l.timestamp.isoformat(),
-                    "ipAddress": str(l.actor_ip),
+                    "id": str(log.id),
+                    "userId": str(log.actor_user_id),
+                    "action": log.action,
+                    "module": log.resource_type,
+                    "details": str(log.metadata_json),
+                    "timestamp": log.timestamp.isoformat(),
+                    "ipAddress": str(log.actor_ip),
                 }
-                for l in logs
+                for log in logs
             ],
         }
     }
@@ -155,11 +175,36 @@ async def get_system_status(
 ):
     return {
         "data": [
-            {"service": "API",         "status": "operational", "uptime": "99.9%", "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "Database",    "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "Redis",       "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "Meilisearch", "status": "operational", "uptime": "99.8%", "lastChecked": datetime.now(UTC).isoformat()},
-            {"service": "MinIO",       "status": "operational", "uptime": "100%",  "lastChecked": datetime.now(UTC).isoformat()},
+            {
+                "service": "API",
+                "status": "operational",
+                "uptime": "99.9%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "Database",
+                "status": "operational",
+                "uptime": "100%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "Redis",
+                "status": "operational",
+                "uptime": "100%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "Meilisearch",
+                "status": "operational",
+                "uptime": "99.8%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
+            {
+                "service": "MinIO",
+                "status": "operational",
+                "uptime": "100%",
+                "lastChecked": datetime.now(UTC).isoformat(),
+            },
         ]
     }
 

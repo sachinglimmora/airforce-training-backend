@@ -138,7 +138,7 @@ async def ingest_events(
     description=(
         "Closes the VR session by setting `ended_at` to now. "
         "Optionally records the average frame rate across the session.\n\n"
-        "Body: `{ \"frame_rate_avg\": 72.4 }` (optional)"
+        'Body: `{ "frame_rate_avg": 72.4 }` (optional)'
     ),
     responses={**_401},
     operation_id="vr_end_session",
@@ -181,6 +181,7 @@ async def get_vr_session(
     session = result.scalar_one_or_none()
     if not session:
         from app.core.exceptions import NotFound
+
         raise NotFound("VR session")
 
     event_count_result = await db.execute(

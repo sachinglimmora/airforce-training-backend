@@ -41,13 +41,33 @@ async def get_all_progress(
             "completedModules": 12,
             "totalModules": 20,
             "recentActivity": [
-                {"id": "1", "type": "module-completed",  "title": "Turbine Blade Inspection", "timestamp": "2026-04-24T10:00:00Z"},
-                {"id": "2", "type": "course-started",    "title": "Jet Engine Systems",       "timestamp": "2026-04-23T14:00:00Z"},
+                {
+                    "id": "1",
+                    "type": "module-completed",
+                    "title": "Turbine Blade Inspection",
+                    "timestamp": "2026-04-24T10:00:00Z",
+                },
+                {
+                    "id": "2",
+                    "type": "course-started",
+                    "title": "Jet Engine Systems",
+                    "timestamp": "2026-04-23T14:00:00Z",
+                },
             ],
             "skills": [
-                {"name": "System Knowledge",    "level": 85, "maxLevel": 100, "category": "Technical"},
-                {"name": "Procedure Adherence", "level": 92, "maxLevel": 100, "category": "Technical"},
-                {"name": "Decision Making",     "level": 78, "maxLevel": 100, "category": "Soft Skills"},
+                {"name": "System Knowledge", "level": 85, "maxLevel": 100, "category": "Technical"},
+                {
+                    "name": "Procedure Adherence",
+                    "level": 92,
+                    "maxLevel": 100,
+                    "category": "Technical",
+                },
+                {
+                    "name": "Decision Making",
+                    "level": 78,
+                    "maxLevel": 100,
+                    "category": "Soft Skills",
+                },
             ],
         }
     }

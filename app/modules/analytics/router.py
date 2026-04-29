@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 from fastapi.routing import APIRouter
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -88,13 +88,33 @@ async def get_trainee_analytics(
             "overallProgress": 65,
             "simulationHours": 24,
             "skills": [
-                {"name": "System Knowledge",      "level": 85, "maxLevel": 100, "category": "Technical"},
-                {"name": "Procedure Adherence",   "level": 92, "maxLevel": 100, "category": "Technical"},
-                {"name": "Decision Making",        "level": 78, "maxLevel": 100, "category": "Soft Skills"},
+                {"name": "System Knowledge", "level": 85, "maxLevel": 100, "category": "Technical"},
+                {
+                    "name": "Procedure Adherence",
+                    "level": 92,
+                    "maxLevel": 100,
+                    "category": "Technical",
+                },
+                {
+                    "name": "Decision Making",
+                    "level": 78,
+                    "maxLevel": 100,
+                    "category": "Soft Skills",
+                },
             ],
             "recentActivity": [
-                {"id": "1", "type": "module-completed",  "title": "Turbine Blade Inspection", "timestamp": "2026-04-24T10:00:00Z"},
-                {"id": "2", "type": "course-started",    "title": "Jet Engine Systems",        "timestamp": "2026-04-23T14:00:00Z"},
+                {
+                    "id": "1",
+                    "type": "module-completed",
+                    "title": "Turbine Blade Inspection",
+                    "timestamp": "2026-04-24T10:00:00Z",
+                },
+                {
+                    "id": "2",
+                    "type": "course-started",
+                    "title": "Jet Engine Systems",
+                    "timestamp": "2026-04-23T14:00:00Z",
+                },
             ],
         }
     }
@@ -233,6 +253,7 @@ async def compliance_report(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from app.modules.analytics.service import AnalyticsService
+
     svc = AnalyticsService(db)
     report = await svc.get_compliance_report()
     return {"data": report}

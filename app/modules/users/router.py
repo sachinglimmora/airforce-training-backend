@@ -2,13 +2,20 @@ from typing import Annotated
 
 from fastapi import Depends, Query
 from fastapi.routing import APIRouter
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
-from app.modules.users.schemas import AssignRoleRequest, CreateUserRequest, PermissionOut, RoleOut, UpdateUserRequest, UserDetailOut
+from app.modules.users.schemas import (
+    AssignRoleRequest,
+    CreateUserRequest,
+    PermissionOut,
+    RoleOut,
+    UpdateUserRequest,
+    UserDetailOut,
+)
 from app.modules.users.service import UsersService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -31,7 +38,9 @@ _404 = {404: {"description": "User not found"}}
 )
 async def list_users(
     role: str | None = Query(None, description="Filter by role name"),
-    status: str | None = Query(None, description="Filter by account status: active | suspended | locked"),
+    status: str | None = Query(
+        None, description="Filter by account status: active | suspended | locked"
+    ),
     limit: int = Query(50, le=200, description="Max results to return (max 200)"),
     current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
     db: Annotated[AsyncSession, Depends(get_db)] = None,
@@ -138,7 +147,7 @@ async def delete_user(
     description=(
         "Grants the specified role to the user. If the user already has the role, the call is a no-op.\n\n"
         "**Required permission:** `user:assign_role`\n\n"
-        "Body: `{ \"role\": \"instructor\" }`"
+        'Body: `{ "role": "instructor" }`'
     ),
     responses={**_401, **_403, **_404},
     operation_id="users_assign_role",
