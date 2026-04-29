@@ -42,6 +42,7 @@ class AssistantMessage(BaseModel):
     grounded: str | None = None
     sources: list[SourceOut] = []
     suggestions: list[SourceOut] = []
+    moderation: dict | None = None  # populated when block/redact fires
 
 
 class UserMessage(BaseModel):

@@ -174,20 +174,78 @@ class RAGService:
         )
         latency["llm"] = int((time.monotonic() - t0) * 1000)
 
+        # ── Output moderation ───────────────────────────────────────────────
+        from app.modules.rag.moderator import moderate as _moderate
+        mod_result = await _moderate(
+            ai_result["response"],
+            decision["grounded"],
+            decision["citation_keys"],
+            self.db,
+        )
+
+        assistant_content: str
+        assistant_grounded: str
+        moderation_field: dict | None = None
+
+        if mod_result.action == "block":
+            assistant_content = (
+                "This response was blocked by the content moderation layer. "
+                "Please rephrase or contact your instructor."
+            )
+            assistant_grounded = "blocked"
+            moderation_field = {
+                "violation_type": mod_result.primary.category if mod_result.primary else None,
+                "severity": mod_result.primary.severity if mod_result.primary else None,
+                "rule_id": str(mod_result.primary.rule_id) if mod_result.primary and mod_result.primary.rule_id else None,
+            }
+        elif mod_result.action == "redact":
+            assistant_content = mod_result.redacted_text or ai_result["response"]
+            assistant_grounded = decision["grounded"]
+            moderation_field = {
+                "redactions_applied": sum(1 for v in mod_result.all if v.action == "redact"),
+                "categories": sorted({v.category for v in mod_result.all if v.action == "redact"}),
+            }
+        else:  # log or pass
+            assistant_content = ai_result["response"]
+            assistant_grounded = decision["grounded"]
+            # No moderation field surfaced for log/pass
+
         assistant_msg = ChatMessage(
-            session_id=session_id, role="assistant", content=ai_result["response"],
-            citations=decision["citation_keys"], grounded=decision["grounded"],
+            session_id=session_id, role="assistant", content=assistant_content,
+            citations=decision["citation_keys"] if mod_result.action != "block" else [],
+            grounded=assistant_grounded,
         )
         self.db.add(assistant_msg)
+
+        # Persist moderation_logs for every violation
+        if mod_result.all:
+            from app.modules.rag.models import ModerationLog
+            trunc_resp = _settings.MODERATION_LOG_TRUNCATE_RESPONSE
+            trunc_match = _settings.MODERATION_LOG_TRUNCATE_MATCH
+            original_truncated = ai_result["response"][:trunc_resp]
+            for v in mod_result.all:
+                self.db.add(ModerationLog(
+                    request_id=ai_result.get("request_id"),
+                    session_id=session_id,
+                    user_id=getattr(user, "id", None),
+                    rule_id=v.rule_id,
+                    category=v.category,
+                    matched_text=(v.matched_text or "")[:trunc_match],
+                    original_response=original_truncated,
+                    action_taken=v.action if v.action != "pass" else "log",
+                    severity=v.severity,
+                ))
+
         await self._log_retrieval(ai_result["request_id"], session_id, user, query, rewritten, skipped,
                                   sess.aircraft_id, cfg["top_k"], hits, decision, latency)
-        sources = await self._resolve_sources(decision["citation_keys"], scores_by_key)
+        sources = await self._resolve_sources(decision["citation_keys"], scores_by_key) if mod_result.action != "block" else []
         await self.db.commit()
 
         return {
             "user_message": user_msg, "assistant_message": assistant_msg,
             "decision": decision, "hits": hits, "rewritten_query": rewritten,
             "skipped_rewrite": skipped, "sources": sources, "suggestions": [],
+            "moderation": moderation_field,  # NEW — None | block dict | redact dict
         }
 
     async def _log_retrieval(self, request_id, session_id, user, original, rewritten, skipped,

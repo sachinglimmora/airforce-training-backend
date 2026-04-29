@@ -40,7 +40,7 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     citations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     grounded: Mapped[str | None] = mapped_column(
-        Enum("strong", "soft", "refused", name="grounded_state"), nullable=True
+        Enum("strong", "soft", "refused", "blocked", name="grounded_state"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
 

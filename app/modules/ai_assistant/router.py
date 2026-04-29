@@ -110,6 +110,7 @@ async def send_message(
                 timestamp=asst_msg.created_at,
                 grounded=asst_msg.grounded,
                 sources=sources, suggestions=suggestions,
+                moderation=result.get("moderation"),  # NEW
             ),
         ).model_dump(mode="json")
     }
