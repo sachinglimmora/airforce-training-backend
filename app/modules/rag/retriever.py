@@ -59,6 +59,7 @@ async def _vector_search(
     for row in result:
         d = dict(row._mapping)
         d["embedding"] = list(d["embedding"])
+        d["score"] = float(d["cosine_score"])  # MMR + grounder expect 'score'
         out.append(d)
     return out
 
