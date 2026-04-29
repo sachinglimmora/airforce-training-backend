@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
+    # ─── Content lifecycle (R73) ────────────────────────────────────────────
+    CONTENT_REVIEW_CADENCE_DAYS_DEFAULT: int = 90
+    CONTENT_REVIEW_CADENCE_DAYS_FCOM: int = 180
+    CONTENT_REVIEW_CADENCE_DAYS_QRH: int = 90
+    CONTENT_REVIEW_CADENCE_DAYS_AMM: int = 180
+    CONTENT_REVIEW_CADENCE_DAYS_SOP: int = 90
+    CONTENT_REVIEW_CADENCE_DAYS_SYLLABUS: int = 60
+    CONTENT_EXPIRING_SOON_WINDOW_DAYS: int = 14
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
