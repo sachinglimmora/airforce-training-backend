@@ -1,5 +1,6 @@
 """RAG orchestration: rewrite -> retrieve -> ground -> AIService.complete -> persist."""
 
+import json
 import time
 from datetime import UTC, datetime
 from uuid import UUID
@@ -47,6 +48,43 @@ def _system_prompt(role: str, aircraft_context: str, soft: bool) -> str:
     return base
 
 
+async def _aircraft_context_label(db: AsyncSession, aircraft_id: UUID | None) -> str:
+    """Resolve an aircraft UUID to its display name for prompt injection."""
+    if not aircraft_id:
+        return "general aviation"
+    from app.modules.content.models import Aircraft
+    result = await db.execute(select(Aircraft).where(Aircraft.id == aircraft_id))
+    a = result.scalar_one_or_none()
+    return a.display_name if a else "general aviation"
+
+
+async def _resolve_sources(
+    db: AsyncSession, citation_keys: list[str], scores_by_key: dict[str, float]
+) -> list[dict]:
+    """Fetch display metadata for a list of citation keys."""
+    if not citation_keys:
+        return []
+    result = await db.execute(
+        select(ContentReference, ContentSection, ContentSource)
+        .join(ContentSection, ContentSection.id == ContentReference.section_id)
+        .join(ContentSource, ContentSource.id == ContentReference.source_id)
+        .where(ContentReference.citation_key.in_(citation_keys))
+    )
+    out = []
+    for ref, sec, src in result:
+        snippet = (sec.content_markdown or "")[:200]
+        out.append({
+            "citation_key": ref.citation_key,
+            "display_label": ref.display_label,
+            "page_number": sec.page_number,
+            "score": scores_by_key.get(ref.citation_key, 0.0),
+            "source_type": src.source_type,
+            "source_version": src.version,
+            "snippet": snippet,
+        })
+    return out
+
+
 class RAGService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -68,35 +106,10 @@ class RAGService:
         return [{"role": m.role, "content": m.content} for m in result.scalars().all()]
 
     async def _aircraft_context_label(self, aircraft_id: UUID | None) -> str:
-        if not aircraft_id:
-            return "general aviation"
-        from app.modules.content.models import Aircraft
-        result = await self.db.execute(select(Aircraft).where(Aircraft.id == aircraft_id))
-        a = result.scalar_one_or_none()
-        return a.display_name if a else "general aviation"
+        return await _aircraft_context_label(self.db, aircraft_id)
 
     async def _resolve_sources(self, citation_keys: list[str], scores_by_key: dict[str, float]) -> list[dict]:
-        if not citation_keys:
-            return []
-        result = await self.db.execute(
-            select(ContentReference, ContentSection, ContentSource)
-            .join(ContentSection, ContentSection.id == ContentReference.section_id)
-            .join(ContentSource, ContentSource.id == ContentReference.source_id)
-            .where(ContentReference.citation_key.in_(citation_keys))
-        )
-        out = []
-        for ref, sec, src in result:
-            snippet = (sec.content_markdown or "")[:200]
-            out.append({
-                "citation_key": ref.citation_key,
-                "display_label": ref.display_label,
-                "page_number": sec.page_number,
-                "score": scores_by_key.get(ref.citation_key, 0.0),
-                "source_type": src.source_type,
-                "source_version": src.version,
-                "snippet": snippet,
-            })
-        return out
+        return await _resolve_sources(self.db, citation_keys, scores_by_key)
 
     async def answer(self, query: str, session_id: UUID, user) -> dict:
         latency: dict[str, int] = {}
@@ -214,3 +227,131 @@ class RAGService:
             latency_ms=latency,
         )
         self.db.add(log_entry)
+
+
+class ExplainService:
+    """One-shot grounded explanation — no session, no history. See spec §7."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def _aircraft_context_label(self, aircraft_id: UUID | None) -> str:
+        return await _aircraft_context_label(self.db, aircraft_id)
+
+    async def _resolve_sources(self, citation_keys: list[str], scores_by_key: dict[str, float]) -> list[dict]:
+        return await _resolve_sources(self.db, citation_keys, scores_by_key)
+
+    async def explain(
+        self,
+        topic: str,
+        context: str | None,
+        system_state: dict | None,
+        aircraft_id: UUID | None,
+        user,
+    ) -> dict:
+        """One-shot grounded explanation. No session, no history."""
+        from app.modules.rag.prompts import EXPLAIN_WHY_SYSTEM_PROMPT
+
+        # 1. Build retrieval query
+        retrieval_query = topic if not context else f"{topic} ({context})"
+
+        # 2. Retrieve
+        cfg = _build_cfg()
+        hits, _latency = await retrieve(self.db, retrieval_query, aircraft_id, cfg)
+
+        # 3. Ground
+        decision = decide(hits, cfg)
+
+        # 4. Refusal short-circuit
+        if decision["grounded"] == "refused":
+            suggestions = await self._resolve_sources(
+                [s["citation_key"] for s in decision["suggestions"]],
+                {s["citation_key"]: s["score"] for s in decision["suggestions"]},
+            )
+            return {
+                "explanation": render_refusal(decision["suggestions"]),
+                "grounded": "refused",
+                "sources": [],
+                "suggestions": suggestions,
+                "moderation": None,
+            }
+
+        # 5. Build messages + call AI gateway
+        aircraft_label = await self._aircraft_context_label(aircraft_id)
+        user_roles = set(getattr(user, "roles", []))
+        audience_label = "instructor" if user_roles & {"admin", "instructor"} else "trainee"
+        sys_state_summary = json.dumps(system_state) if system_state else "(none)"
+
+        sys_prompt = EXPLAIN_WHY_SYSTEM_PROMPT.format(
+            audience_label=audience_label,
+            aircraft_context=aircraft_label,
+            system_state_summary=sys_state_summary,
+        )
+        messages: list[dict] = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"Explain: {topic}"},
+        ]
+        if context:
+            messages.append({"role": "user", "content": f"Context: {context}"})
+
+        ai_svc = AIService(self.db)
+        ai_result = await ai_svc.complete(
+            AICompletionRequest(
+                messages=messages,
+                context_citations=decision["citation_keys"],
+                temperature=0.2,
+                max_tokens=600,
+                cache=True,
+            ),
+            user_id=str(getattr(user, "id", "anonymous")),
+        )
+
+        # 6. Moderate — lazy import; pass-through when moderator not installed yet
+        try:
+            from app.modules.rag.moderator import moderate as _moderate  # noqa: PLC0415
+            mod_result = await _moderate(
+                ai_result["response"], decision["grounded"], decision["citation_keys"], self.db,
+            )
+        except ImportError:
+            from dataclasses import dataclass as _dataclass
+            from dataclasses import field as _field
+
+            @_dataclass
+            class _PassResult:  # noqa: N801
+                action: str = "pass"
+                primary: object = None
+                redacted_text: str | None = None
+                all: list = _field(default_factory=list)
+
+            mod_result = _PassResult()
+
+        # 7. Build response based on moderation result
+        if mod_result.action == "block":
+            return {
+                "explanation": "This response was blocked by the content moderation layer.",
+                "grounded": "blocked",
+                "sources": [],
+                "suggestions": [],
+                "moderation": {
+                    "violation_type": mod_result.primary.category,
+                    "severity": mod_result.primary.severity,
+                },
+            }
+
+        text = mod_result.redacted_text if mod_result.action == "redact" else ai_result["response"]
+        moderation_field = (
+            {"redactions_applied": sum(1 for v in mod_result.all if v.action == "redact")}
+            if mod_result.action == "redact"
+            else None
+        )
+
+        scores_by_key = {k: h.score for h in hits for k in h.citation_keys if h.included}
+        sources = await self._resolve_sources(decision["citation_keys"], scores_by_key)
+
+        return {
+            "explanation": text,
+            "grounded": decision["grounded"],
+            "sources": sources,
+            "suggestions": [],
+            "moderation": moderation_field,
+        }

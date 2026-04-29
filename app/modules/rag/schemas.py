@@ -69,3 +69,18 @@ class SessionOut(BaseModel):
     status: str
     created_at: datetime
     last_activity_at: datetime
+
+
+class ExplainRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=2000)
+    context: str | None = None
+    system_state: dict | None = None
+    aircraft_id: UUID | None = None
+
+
+class ExplainResponse(BaseModel):
+    explanation: str
+    grounded: str  # strong | soft | refused | blocked
+    sources: list[SourceOut] = []
+    suggestions: list[SourceOut] = []
+    moderation: dict | None = None

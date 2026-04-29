@@ -16,11 +16,13 @@ from app.modules.rag.schemas import (
     AssistantMessage,
     ChatTurnResponse,
     CreateSessionRequest,
+    ExplainRequest,
+    ExplainResponse,
     SessionOut,
     SourceOut,
     UserMessage,
 )
-from app.modules.rag.service import RAGService
+from app.modules.rag.service import ExplainService, RAGService
 
 router = APIRouter()
 
@@ -125,6 +127,54 @@ async def send_message(
             ],
         }
     return response
+
+
+@router.post(
+    "/explain",
+    response_model=dict,
+    summary="One-shot grounded explanation of an aircraft system behavior",
+    description=(
+        "Stateless 'explain-why' endpoint for cockpit overlays and module pages. "
+        "No session, no history. Returns a grounded educational explanation with citations.\n\n"
+        "Only `topic` is required. Optionally pass `context` (e.g., aircraft type + conditions), "
+        "`system_state` (live telemetry dict), and `aircraft_id` to scope retrieval."
+    ),
+    responses={
+        400: {"description": "topic is empty or whitespace"},
+        401: {"description": "Not authenticated"},
+        502: {"description": "All LLM providers unreachable"},
+    },
+    operation_id="ai_assistant_explain",
+)
+async def explain(
+    body: ExplainRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not body.topic.strip():
+        raise HTTPException(status_code=400, detail="topic is required")
+
+    svc = ExplainService(db)
+    result = await svc.explain(
+        topic=body.topic.strip(),
+        context=body.context,
+        system_state=body.system_state,
+        aircraft_id=body.aircraft_id,
+        user=current_user,
+    )
+
+    sources = [SourceOut(**s) for s in result["sources"]]
+    suggestions = [SourceOut(**s) for s in result["suggestions"]]
+
+    return {
+        "data": ExplainResponse(
+            explanation=result["explanation"],
+            grounded=result["grounded"],
+            sources=sources,
+            suggestions=suggestions,
+            moderation=result.get("moderation"),
+        ).model_dump(mode="json")
+    }
 
 
 @router.get(

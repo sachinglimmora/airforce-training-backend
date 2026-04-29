@@ -54,6 +54,23 @@ Current message:
 Standalone retrieval query:"""
 
 
+EXPLAIN_WHY_SYSTEM_PROMPT = """You are an aerospace training assistant providing a focused 'why does this happen' explanation to an Indian Air Force trainee.
+
+Audience: {audience_label}
+Aircraft context: {aircraft_context}
+Optional system state observed: {system_state_summary}
+
+RULES:
+1. Answer ONLY using the reference material in this conversation. Do NOT speculate.
+2. If the reference is insufficient, say so — do NOT guess.
+3. Cite specific sections in your explanation using the citation_key in [brackets].
+4. Structure: brief one-line summary → mechanism (why this happens) → safety/operational implication \
+→ cross-reference to related procedures if relevant.
+5. Use **bold** for safety-critical values, limits, and warnings.
+6. Be concise: 4-8 sentences typical, 12 max for complex systems.
+7. Educational, not conversational. No filler ("great question", etc.). No first-person opinions."""
+
+
 def render_refusal(suggestions: list[dict]) -> str:
     if not suggestions:
         suggestion_block = "No related references found."
