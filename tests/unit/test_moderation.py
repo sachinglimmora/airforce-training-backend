@@ -139,3 +139,53 @@ def test_casual_match_returns_log_violations():
     assert all(v.category == "casual" for v in out)
     assert all(v.action == "log" for v in out)
     assert all(v.severity == "low" for v in out)
+
+
+from app.modules.rag.moderator import _resolve_action
+
+
+def test_resolve_no_violations_returns_pass():
+    out = _resolve_action([], "original text")
+    assert out.action == "pass"
+    assert out.primary is None
+    assert out.all == []
+
+
+def test_resolve_block_wins_over_redact_and_log():
+    block = Violation("classification", uuid.uuid4(), "X", "block", "critical", 0, 1)
+    redact = Violation("profanity", uuid.uuid4(), "Y", "redact", "medium", 1, 2)
+    out = _resolve_action([redact, block], "original text")
+    assert out.action == "block"
+    assert out.primary is block
+
+
+def test_resolve_most_severe_block_wins_when_multiple_blocks():
+    high = Violation("banned_phrase", uuid.uuid4(), "A", "block", "high", 0, 1)
+    critical = Violation("classification", uuid.uuid4(), "B", "block", "critical", 1, 2)
+    out = _resolve_action([high, critical], "original text")
+    assert out.action == "block"
+    assert out.primary is critical
+
+
+def test_resolve_redact_uses_redacted_text_when_provided():
+    redact = Violation("profanity", uuid.uuid4(), "damn", "redact", "medium", 4, 8)
+    out = _resolve_action([redact], "the **** word", redacted_text="the **** word")
+    assert out.action == "redact"
+    assert out.redacted_text == "the **** word"
+
+
+def test_resolve_log_only_when_no_block_or_redact():
+    log_v = Violation("casual", uuid.uuid4(), "lol", "log", "low", 0, 3)
+    out = _resolve_action([log_v], "original text")
+    assert out.action == "log"
+    assert out.primary is None
+    assert log_v in out.all
+
+
+def test_resolve_all_violations_in_result_regardless_of_action():
+    block = Violation("classification", uuid.uuid4(), "X", "block", "critical", 0, 1)
+    redact = Violation("profanity", uuid.uuid4(), "Y", "redact", "medium", 1, 2)
+    log_v = Violation("casual", uuid.uuid4(), "Z", "log", "low", 2, 3)
+    out = _resolve_action([block, redact, log_v], "original text")
+    assert out.action == "block"
+    assert len(out.all) == 3

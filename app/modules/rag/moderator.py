@@ -116,6 +116,33 @@ def _check_casual(text: str, rules: list[CompiledRule]) -> list[Violation]:
     return _check_pattern_category(text, rules)
 
 
+def _resolve_action(
+    violations: list[Violation],
+    original_text: str,
+    redacted_text: str | None = None,
+) -> ModerationResult:
+    """Action precedence: BLOCK > REDACT > LOG > PASS.
+
+    Multiple BLOCKs: most-severe wins. All violations are returned in `all` regardless
+    of which action drove the result, so they all get logged.
+    """
+    if not violations:
+        return ModerationResult(action="pass", all=[])
+    blocks = [v for v in violations if v.action == "block"]
+    if blocks:
+        primary = max(blocks, key=lambda v: _SEVERITY_RANK.get(v.severity, 0))
+        return ModerationResult(action="block", primary=primary, all=violations)
+    redacts = [v for v in violations if v.action == "redact"]
+    if redacts:
+        return ModerationResult(
+            action="redact",
+            primary=None,
+            redacted_text=redacted_text if redacted_text is not None else original_text,
+            all=violations,
+        )
+    return ModerationResult(action="log", primary=None, all=violations)
+
+
 # Detector + orchestration functions defined in subsequent tasks
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
     raise NotImplementedError  # implemented in Task B8
