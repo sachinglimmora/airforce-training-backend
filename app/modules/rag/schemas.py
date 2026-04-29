@@ -69,3 +69,58 @@ class SessionOut(BaseModel):
     status: str
     created_at: datetime
     last_activity_at: datetime
+
+
+# ─── Moderation ──────────────────────────────────────────────────────────
+
+
+class ModerationRuleIn(BaseModel):
+    category: str = Field(pattern="^(classification|banned_phrase|profanity|casual)$")
+    pattern: str = Field(min_length=1, max_length=500)
+    pattern_type: str = Field(default="regex", pattern="^(regex|literal)$")
+    action: str = Field(pattern="^(block|redact|log)$")
+    severity: str = Field(pattern="^(critical|high|medium|low)$")
+    description: str | None = None
+    active: bool = True
+
+
+class ModerationRuleUpdate(BaseModel):
+    category: str | None = Field(default=None, pattern="^(classification|banned_phrase|profanity|casual)$")
+    pattern: str | None = Field(default=None, min_length=1, max_length=500)
+    pattern_type: str | None = Field(default=None, pattern="^(regex|literal)$")
+    action: str | None = Field(default=None, pattern="^(block|redact|log)$")
+    severity: str | None = Field(default=None, pattern="^(critical|high|medium|low)$")
+    description: str | None = None
+    active: bool | None = None
+
+
+class ModerationRuleOut(BaseModel):
+    id: UUID
+    category: str
+    pattern: str
+    pattern_type: str
+    action: str
+    severity: str
+    description: str | None
+    active: bool
+    created_by: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ModerationLogOut(BaseModel):
+    id: UUID
+    request_id: str | None
+    session_id: UUID | None
+    user_id: UUID | None
+    rule_id: UUID | None
+    category: str
+    matched_text: str
+    original_response: str
+    action_taken: str
+    severity: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
