@@ -69,9 +69,15 @@ async def test_send_message_returns_grounded_answer(client, db_session):
     app.dependency_overrides[get_current_user] = lambda: fake_user
 
     try:
-        # Patch AIService at its DEFINITION site so deferred imports inside embedder.py
-        # and top-level imports in rewriter.py / service.py all pick up the mock.
-        with patch("app.modules.ai.service.AIService") as mock_ai_cls:
+        # Patch AIService at all 3 binding sites:
+        # - definition site (intercepted by embedder.py deferred import)
+        # - rag/service.py top-level import binding
+        # - rag/rewriter.py top-level import binding
+        with (
+            patch("app.modules.ai.service.AIService") as mock_ai_cls,
+            patch("app.modules.rag.service.AIService", new=mock_ai_cls),
+            patch("app.modules.rag.rewriter.AIService", new=mock_ai_cls),
+        ):
             instance = mock_ai_cls.return_value
             instance.embed = AsyncMock(side_effect=fake_embed_factory)
             instance.complete = AsyncMock(side_effect=fake_complete)
