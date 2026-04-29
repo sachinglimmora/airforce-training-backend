@@ -186,7 +186,9 @@ async def load_rules(db) -> dict[Category, list[CompiledRule]]:
     (re.Pattern doesn't pickle cleanly); the cache stores rule dicts, and
     re-compilation runs on each load. Cheap (~50 patterns max in practice)."""
     import json
+
     from sqlalchemy import select
+
     from app.modules.rag.models import ModerationRule
 
     cached = await _cache_get(_CACHE_KEY)
@@ -242,4 +244,31 @@ async def invalidate_cache() -> None:
 
 
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
-    raise NotImplementedError  # implemented in Task B8
+    """Run all output moderation checks on `text` and return the resolved action.
+
+    See spec §3 for the call shape inside RAGService.answer."""
+    if not _settings.MODERATION_ENABLED:
+        return ModerationResult(action="pass", all=[])
+
+    # Heuristic check is rule-independent — always run it
+    heuristic_violations = _check_ungrounded(text, grounded_state, citations)
+
+    # Rule-based checks — fail-open if rule loading errors
+    rule_violations: list[Violation] = []
+    redacted_text = text
+    try:
+        rules_by_cat = await load_rules(db)
+    except Exception as exc:
+        log.error("moderation_rule_load_failed", error=str(exc))
+        if not _settings.MODERATION_FAIL_OPEN:
+            raise
+        rules_by_cat = {}
+
+    rule_violations += _check_pattern_category(text, rules_by_cat.get("classification", []))
+    rule_violations += _check_pattern_category(text, rules_by_cat.get("banned_phrase", []))
+    redacted_text, profanity_v = _check_profanity(text, rules_by_cat.get("profanity", []))
+    rule_violations += profanity_v
+    rule_violations += _check_casual(text, rules_by_cat.get("casual", []))
+
+    all_violations = heuristic_violations + rule_violations
+    return _resolve_action(all_violations, text, redacted_text=redacted_text if profanity_v else None)

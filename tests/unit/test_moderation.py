@@ -1,9 +1,27 @@
 import re
 import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.modules.rag.moderator import CompiledRule, Violation, _check_pattern_category
+from app.modules.rag.moderator import (
+    _CACHE_KEY,
+    CompiledRule,
+    Violation,
+    _check_casual,
+    _check_pattern_category,
+    _check_profanity,
+    _check_ungrounded,
+    _resolve_action,
+    invalidate_cache,
+    load_rules,
+    moderate,
+)
+from app.modules.rag.moderator import (
+    _settings as _mod_settings,
+)
+
+# ── helpers ──────────────────────────────────────────────────────────────────
 
 
 def _rule(category, action, severity, pattern_str):
@@ -14,6 +32,21 @@ def _rule(category, action, severity, pattern_str):
         severity=severity,
         compiled=re.compile(pattern_str, re.IGNORECASE),
     )
+
+
+def _row(category, pattern, action, severity, pattern_type="regex", active=True):
+    r = MagicMock()
+    r.id = uuid.uuid4()
+    r.category = category
+    r.pattern = pattern
+    r.pattern_type = pattern_type
+    r.action = action
+    r.severity = severity
+    r.active = active
+    return r
+
+
+# ── B2: _check_pattern_category ──────────────────────────────────────────────
 
 
 def test_pattern_no_match_returns_empty():
@@ -54,7 +87,7 @@ def test_pattern_empty_rules_list():
     assert _check_pattern_category("anything", []) == []
 
 
-from app.modules.rag.moderator import _check_ungrounded
+# ── B3: _check_ungrounded ────────────────────────────────────────────────────
 
 
 def test_ungrounded_strong_with_brackets_returns_empty():
@@ -87,7 +120,7 @@ def test_ungrounded_refused_state_no_check():
     assert out == []
 
 
-from app.modules.rag.moderator import _check_profanity
+# ── B4: _check_profanity ─────────────────────────────────────────────────────
 
 
 def test_profanity_no_match_returns_text_unchanged():
@@ -124,7 +157,7 @@ def test_profanity_multiple_rules_chained():
     assert len(viols) == 2
 
 
-from app.modules.rag.moderator import _check_casual
+# ── B5: _check_casual ────────────────────────────────────────────────────────
 
 
 def test_casual_no_match_returns_empty():
@@ -141,7 +174,7 @@ def test_casual_match_returns_log_violations():
     assert all(v.severity == "low" for v in out)
 
 
-from app.modules.rag.moderator import _resolve_action
+# ── B6: _resolve_action ──────────────────────────────────────────────────────
 
 
 def test_resolve_no_violations_returns_pass():
@@ -191,23 +224,7 @@ def test_resolve_all_violations_in_result_regardless_of_action():
     assert len(out.all) == 3
 
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-
-from app.modules.rag.moderator import load_rules, invalidate_cache
-
-
-def _row(category, pattern, action, severity, pattern_type="regex", active=True):
-    r = MagicMock()
-    r.id = uuid.uuid4()
-    r.category = category
-    r.pattern = pattern
-    r.pattern_type = pattern_type
-    r.action = action
-    r.severity = severity
-    r.active = active
-    return r
+# ── B7: load_rules + invalidate_cache ────────────────────────────────────────
 
 
 async def test_load_rules_from_db_when_cache_miss():
@@ -250,9 +267,63 @@ async def test_load_rules_handles_literal_pattern_type():
 async def test_invalidate_cache_calls_redis_del():
     with patch("app.modules.rag.moderator._cache_del", new=AsyncMock()) as mock_del:
         await invalidate_cache()
-        mock_del.assert_awaited_once_with(_cache_key())
+        mock_del.assert_awaited_once_with(_CACHE_KEY)
 
 
-def _cache_key():
-    from app.modules.rag.moderator import _CACHE_KEY
-    return _CACHE_KEY
+# ── B8: moderate() orchestration ─────────────────────────────────────────────
+
+
+async def test_moderate_returns_pass_when_disabled():
+    with patch.object(_mod_settings, "MODERATION_ENABLED", False):
+        out = await moderate("anything", "strong", ["FCOM-3.2.1"], db=None)
+        assert out.action == "pass"
+
+
+async def test_moderate_returns_pass_when_no_rules_and_grounded_with_citation():
+    with patch("app.modules.rag.moderator.load_rules", new=AsyncMock(return_value={})):
+        out = await moderate("Per [FCOM-3.2.1] start engine.", "strong", ["FCOM-3.2.1"], db=MagicMock())
+        assert out.action == "pass"
+
+
+async def test_moderate_blocks_classification_match():
+    rule = _rule("classification", "block", "critical", r"\bSECRET//\w+")
+    rules = {"classification": [rule]}
+    with patch("app.modules.rag.moderator.load_rules", new=AsyncMock(return_value=rules)):
+        out = await moderate("contents SECRET//NOFORN", "strong", [], db=MagicMock())
+        assert out.action == "block"
+        assert out.primary.category == "classification"
+
+
+async def test_moderate_redacts_profanity():
+    rule = _rule("profanity", "redact", "medium", r"\bdamn\b")
+    rules = {"profanity": [rule]}
+    with patch("app.modules.rag.moderator.load_rules", new=AsyncMock(return_value=rules)):
+        out = await moderate("the damn thing", "strong", [], db=MagicMock())
+        assert out.action == "redact"
+        assert out.redacted_text == "the **** thing"
+
+
+async def test_moderate_blocks_ungrounded_strong_response():
+    with patch("app.modules.rag.moderator.load_rules", new=AsyncMock(return_value={})):
+        out = await moderate("no citation here.", "strong", ["FCOM-3.2.1"], db=MagicMock())
+        assert out.action == "block"
+        assert out.primary.category == "ungrounded"
+
+
+async def test_moderate_fail_open_passes_when_db_error():
+    failing_db = MagicMock()
+    with patch("app.modules.rag.moderator.load_rules", new=AsyncMock(side_effect=Exception("db down"))), \
+         patch.object(_mod_settings, "MODERATION_FAIL_OPEN", True):
+        # ungrounded heuristic still fires (it doesn't need rules), but the rule-based
+        # detectors are skipped. So we get a block from the heuristic, NOT pass.
+        # Instead test that fail-open works when grounded='soft' (no heuristic):
+        out = await moderate("response", "soft", ["FCOM-3.2.1"], db=failing_db)
+        assert out.action == "pass"
+
+
+async def test_moderate_fail_closed_raises_when_db_error():
+    failing_db = MagicMock()
+    with patch("app.modules.rag.moderator.load_rules", new=AsyncMock(side_effect=Exception("db down"))), \
+         patch.object(_mod_settings, "MODERATION_FAIL_OPEN", False):
+        with pytest.raises(Exception):
+            await moderate("response", "soft", ["FCOM-3.2.1"], db=failing_db)
