@@ -111,6 +111,11 @@ def _check_profanity(text: str, rules: list[CompiledRule]) -> tuple[str, list[Vi
     return redacted, violations
 
 
+def _check_casual(text: str, rules: list[CompiledRule]) -> list[Violation]:
+    """Casual register detector — same shape as pattern category but always action='log'."""
+    return _check_pattern_category(text, rules)
+
+
 # Detector + orchestration functions defined in subsequent tasks
 async def moderate(text: str, grounded_state: str, citations: list[str], db) -> ModerationResult:
     raise NotImplementedError  # implemented in Task B8

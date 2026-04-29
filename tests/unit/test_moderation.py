@@ -122,3 +122,20 @@ def test_profanity_multiple_rules_chained():
     assert "damn" not in redacted
     assert "hell" not in redacted
     assert len(viols) == 2
+
+
+from app.modules.rag.moderator import _check_casual
+
+
+def test_casual_no_match_returns_empty():
+    rules = [_rule("casual", "log", "low", r"\blol\b")]
+    assert _check_casual("formal text", rules) == []
+
+
+def test_casual_match_returns_log_violations():
+    rules = [_rule("casual", "log", "low", r"\b(lol|haha)\b")]
+    out = _check_casual("yeah lol haha that's funny", rules)
+    assert len(out) == 2
+    assert all(v.category == "casual" for v in out)
+    assert all(v.action == "log" for v in out)
+    assert all(v.severity == "low" for v in out)
