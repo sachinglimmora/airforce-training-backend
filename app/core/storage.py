@@ -38,10 +38,10 @@ def ensure_bucket_exists(bucket_name: str):
     except S3Error as e:
         print(f"Error checking/creating bucket {bucket_name}: {e}")
 
-# Ensure buckets exist and are public
-ensure_bucket_exists(settings.MINIO_BUCKET_ASSETS)
-ensure_bucket_exists(settings.MINIO_BUCKET_CONTENT)
-ensure_bucket_exists("instructor-videos")
+def init_buckets():
+    ensure_bucket_exists(settings.MINIO_BUCKET_ASSETS)
+    ensure_bucket_exists(settings.MINIO_BUCKET_CONTENT)
+    ensure_bucket_exists("instructor-videos")
 
 def upload_file_to_minio(file_obj, filename: str, content_type: str, bucket_name: str) -> str:
     """Uploads a file to MinIO and returns the public URL"""

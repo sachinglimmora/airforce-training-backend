@@ -147,6 +147,8 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup():
+        from app.core.storage import init_buckets
+        init_buckets()
         log.info("aegis_backend_started", env=settings.ENV)
 
     @app.on_event("shutdown")
