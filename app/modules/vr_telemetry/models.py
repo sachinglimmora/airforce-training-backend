@@ -13,7 +13,6 @@ def _now():
     return datetime.now(UTC)
 
 
-
 class VRSession(Base):
     __tablename__ = "vr_sessions"
 

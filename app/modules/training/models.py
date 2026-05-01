@@ -12,7 +12,6 @@ def _now():
     return datetime.now(UTC)
 
 
-
 class Course(Base):
     __tablename__ = "courses"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

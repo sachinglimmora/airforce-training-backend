@@ -13,7 +13,6 @@ class TraineeOverview(BaseModel):
     progress: float = 0.0
     simulation_hours: float = Field(0.0, alias="simulationHours")
 
-
     status: str = "active"
 
     model_config = ConfigDict(from_attributes=True)

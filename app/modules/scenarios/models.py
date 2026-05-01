@@ -18,7 +18,6 @@ def _now():
 
 
 class Scenario(Base):
-
     __tablename__ = "scenarios"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

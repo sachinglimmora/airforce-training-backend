@@ -87,7 +87,8 @@ async def get_roles(
     roles = result.scalars().all()
     return {
         "data": [
-            {"id": str(role.id), "name": role.name, "userCount": 0, "permissions": []} for role in roles
+            {"id": str(role.id), "name": role.name, "userCount": 0, "permissions": []}
+            for role in roles
         ]
     }
 

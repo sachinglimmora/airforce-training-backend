@@ -29,9 +29,6 @@ class ActionRequest(BaseModel):
     payload: dict = {}
 
 
-
-
-
 @router.get(
     "",
     response_model=dict,
