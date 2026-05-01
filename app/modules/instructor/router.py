@@ -3,19 +3,21 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException
 from fastapi.routing import APIRouter
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.modules.analytics.models import TrainingSession
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
+from app.modules.competency.models import CompetencyEvidence
 from app.modules.instructor.schemas import (
     ScenarioOut,
     TrainingSessionCreate,
     TrainingSessionOut,
     TrainingSessionUpdate,
 )
+from app.modules.procedures.models import ProcedureSession
 from app.modules.scenarios.models import Scenario
 from app.modules.users.service import UsersService
 
@@ -23,6 +25,47 @@ router = APIRouter()
 
 _401 = {401: {"description": "Not authenticated"}}
 _404 = {404: {"description": "Not found"}}
+
+
+async def _trainee_metrics(db: AsyncSession, trainee_id: uuid.UUID) -> dict:
+    """Compute readiness, progress, and sim hours for one trainee."""
+    # Readiness from competency evidence
+    ce_result = await db.execute(
+        select(func.avg(CompetencyEvidence.score)).where(
+            CompetencyEvidence.trainee_id == trainee_id
+        )
+    )
+    avg_score = ce_result.scalar()
+    readiness = round(float(avg_score), 1) if avg_score else 0.0
+
+    # Progress from procedure sessions
+    ps_result = await db.execute(
+        select(ProcedureSession).where(ProcedureSession.trainee_id == trainee_id)
+    )
+    ps_sessions = ps_result.scalars().all()
+    completed = sum(1 for s in ps_sessions if s.status == "completed")
+    total = len(ps_sessions)
+    progress = round((completed / total) * 100, 1) if total > 0 else 0.0
+
+    # Simulation hours from scenario training sessions
+    ts_result = await db.execute(
+        select(TrainingSession).where(
+            TrainingSession.trainee_id == trainee_id,
+            TrainingSession.session_type == "scenario",
+            TrainingSession.status == "completed",
+            TrainingSession.ended_at.is_not(None),
+        )
+    )
+    sim_sessions = ts_result.scalars().all()
+    sim_hours = round(
+        sum((s.ended_at - s.started_at).total_seconds() / 3600 for s in sim_sessions), 1
+    )
+
+    return {
+        "readinessScore": readiness,
+        "progress": progress,
+        "simulationHours": sim_hours,
+    }
 
 
 @router.get(
@@ -43,18 +86,21 @@ async def get_trainees_overview(
 ):
     svc = UsersService(db)
     users = await svc.list_users(role="trainee")
-    trainees = [
-        {
-            "id": u.id,
-            "email": u.email,
-            "full_name": u.full_name,
-            "readinessScore": 0.0,
-            "progress": 0.0,
-            "simulationHours": 0.0,
-            "status": u.status,
-        }
-        for u in users
-    ]
+
+    trainees = []
+    for u in users:
+        metrics = await _trainee_metrics(db, u.id)
+        trainees.append(
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "full_name": u.full_name,
+                "name": u.full_name,
+                "status": u.status,
+                **metrics,
+            }
+        )
+
     return {"data": trainees}
 
 
@@ -221,17 +267,50 @@ async def create_scenario(
     operation_id="instructor_analytics",
 )
 async def get_instructor_analytics(
-    _db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
 ):
+    from app.modules.auth.models import Role, UserRole
+
+    # Count trainees
+    trainee_q = (
+        select(func.count(func.distinct(UserRole.user_id)))
+        .join(Role, UserRole.role_id == Role.id)
+        .where(Role.name == "trainee")
+    )
+    total_trainees = (await db.execute(trainee_q)).scalar() or 0
+
+    # Simulation stats
+    sim_q = select(TrainingSession).where(
+        TrainingSession.session_type == "scenario",
+        TrainingSession.status == "completed",
+        TrainingSession.ended_at.is_not(None),
+    )
+    sim_sessions = (await db.execute(sim_q)).scalars().all()
+    total_sim_hours = round(
+        sum((s.ended_at - s.started_at).total_seconds() / 3600 for s in sim_sessions), 1
+    )
+    completed_sims = len(sim_sessions)
+
+    # Active sessions
+    active_q = select(func.count(TrainingSession.id)).where(
+        TrainingSession.status == "in_progress"
+    )
+    active_sessions = (await db.execute(active_q)).scalar() or 0
+
+    # Average readiness
+    avg_q = select(func.avg(CompetencyEvidence.score))
+    avg_readiness = (await db.execute(avg_q)).scalar()
+    avg_readiness = round(float(avg_readiness), 1) if avg_readiness else 0.0
+
     return {
         "data": {
             "summary": {
-                "totalTrainees": 0,
-                "avgReadiness": 0.0,
-                "totalSimHours": 0,
-                "completedSims": 0,
-                "activeSessions": 0,
+                "totalTrainees": total_trainees,
+                "avgReadiness": avg_readiness,
+                "totalSimHours": total_sim_hours,
+                "completedSims": completed_sims,
+                "activeSessions": active_sessions,
                 "simulationsToday": 0,
             },
             "charts": {
