@@ -48,9 +48,9 @@ async def get_trainees_overview(
             "id": u.id,
             "email": u.email,
             "full_name": u.full_name,
-            "readinessScore": 85.0,
-            "progress": 70.0,
-            "simulationHours": 12.5,
+            "readinessScore": 0.0,
+            "progress": 0.0,
+            "simulationHours": 0.0,
             "status": u.status,
         }
         for u in users
@@ -227,27 +227,16 @@ async def get_instructor_analytics(
     return {
         "data": {
             "summary": {
-                "totalTrainees": 156,
-                "avgReadiness": 82.5,
-                "totalSimHours": 1420,
-                "completedSims": 312,
-                "activeSessions": 8,
-                "simulationsToday": 24,
+                "totalTrainees": 0,
+                "avgReadiness": 0.0,
+                "totalSimHours": 0,
+                "completedSims": 0,
+                "activeSessions": 0,
+                "simulationsToday": 0,
             },
             "charts": {
-                "trainingCompletion": [
-                    {"label": "Mon", "value": 12},
-                    {"label": "Tue", "value": 19},
-                    {"label": "Wed", "value": 15},
-                    {"label": "Thu", "value": 22},
-                    {"label": "Fri", "value": 30},
-                ],
-                "readinessTrend": [
-                    {"label": "Jan", "value": 65},
-                    {"label": "Feb", "value": 72},
-                    {"label": "Mar", "value": 78},
-                    {"label": "Apr", "value": 82},
-                ],
+                "trainingCompletion": [],
+                "readinessTrend": [],
                 "simulationUsage": [],
                 "skillDistribution": [],
             },

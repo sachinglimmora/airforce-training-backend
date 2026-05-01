@@ -13,6 +13,7 @@ from app.modules.alerts.router import router as alerts_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.assets.router import router as assets_router
 from app.modules.audit.router import router as audit_router
+from app.modules.knowledge.router import router as knowledge_router
 
 # Module routers
 from app.modules.auth.router import router as auth_router
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(vr_router, prefix=f"{prefix}/vr", tags=["vr"])
     app.include_router(audit_router, prefix=f"{prefix}/audit", tags=["audit"])
     app.include_router(assets_router, prefix=f"{prefix}/assets", tags=["assets"])
+    app.include_router(knowledge_router, prefix=f"{prefix}/knowledge", tags=["knowledge"])
     app.include_router(training_router, prefix=f"{prefix}", tags=["training"])
     app.include_router(compatibility_router, prefix=f"{prefix}", tags=["compatibility"])
     app.include_router(instructor_router, prefix=f"{prefix}/instructor", tags=["instructor"])

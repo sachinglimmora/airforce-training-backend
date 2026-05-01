@@ -254,3 +254,20 @@ async def get_security_settings(
             "sessionTimeout": 3600,
         }
     }
+
+
+@router.patch(
+    "/security-settings",
+    response_model=dict,
+    summary="Update platform security settings",
+    description="Updates the platform security configuration.",
+    responses={**_401, **_403},
+    operation_id="admin_update_security_settings",
+)
+async def update_security_settings(
+    body: dict,
+    _db: Annotated[AsyncSession, Depends(get_db)],
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
+):
+    return {"data": body}
+

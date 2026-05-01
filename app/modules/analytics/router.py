@@ -84,38 +84,25 @@ async def get_trainee_analytics(
 ):
     return {
         "data": {
-            "readinessScore": 88,
-            "overallProgress": 65,
-            "simulationHours": 24,
+            "readinessScore": 0,
+            "overallProgress": 0,
+            "simulationHours": 0,
             "skills": [
-                {"name": "System Knowledge", "level": 85, "maxLevel": 100, "category": "Technical"},
+                {"name": "System Knowledge", "level": 0, "maxLevel": 100, "category": "Technical"},
                 {
                     "name": "Procedure Adherence",
-                    "level": 92,
+                    "level": 0,
                     "maxLevel": 100,
                     "category": "Technical",
                 },
                 {
                     "name": "Decision Making",
-                    "level": 78,
+                    "level": 0,
                     "maxLevel": 100,
                     "category": "Soft Skills",
                 },
             ],
-            "recentActivity": [
-                {
-                    "id": "1",
-                    "type": "module-completed",
-                    "title": "Turbine Blade Inspection",
-                    "timestamp": "2026-04-24T10:00:00Z",
-                },
-                {
-                    "id": "2",
-                    "type": "course-started",
-                    "title": "Jet Engine Systems",
-                    "timestamp": "2026-04-23T14:00:00Z",
-                },
-            ],
+            "recentActivity": [],
         }
     }
 

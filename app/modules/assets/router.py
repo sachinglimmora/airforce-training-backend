@@ -1,6 +1,5 @@
 from typing import Annotated
-
-from fastapi import Depends, Query
+from fastapi import Depends, Query, UploadFile, File
 from fastapi.routing import APIRouter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,8 +9,10 @@ from app.database import get_db
 from app.modules.assets.models import Asset
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
+from app.core.storage import upload_file_to_minio
 
 router = APIRouter()
+
 settings = get_settings()
 
 
@@ -131,3 +132,29 @@ async def download_asset(
             "format": asset.format,
         }
     }
+
+
+@router.post("/upload", summary="Upload a new asset to MinIO")
+async def upload_asset(
+    file: UploadFile = File(...),
+    current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
+):
+    try:
+        # Upload file directly from memory stream to MinIO
+        file_url = upload_file_to_minio(
+            file_obj=file.file,
+            filename=file.filename,
+            content_type=file.content_type,
+            bucket_name=settings.MINIO_BUCKET_ASSETS
+        )
+        
+        return {
+            "data": {
+                "message": "Upload successful",
+                "url": file_url
+            }
+        }
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
+

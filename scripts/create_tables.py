@@ -81,6 +81,10 @@ def import_models():
         from app.modules.vr_telemetry.models import VRSession, VRTelemetryEvent
     except ImportError:
         pass
+    try:
+        from app.modules.instructor_videos.models import InstructorVideo
+    except ImportError:
+        pass
 
 
 import_models()
