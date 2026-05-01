@@ -53,6 +53,34 @@ def import_models():
         from app.modules.analytics.models import SessionEvent, TrainingSession
     except ImportError:
         pass
+    try:
+        from app.modules.scenarios.models import Scenario, ScenarioSession
+    except ImportError:
+        pass
+    try:
+        from app.modules.competency.models import Competency, CompetencyEvidence, Evaluation, Rubric
+    except ImportError:
+        pass
+    try:
+        from app.modules.assets.models import Asset
+    except ImportError:
+        pass
+    try:
+        from app.modules.audit.models import AuditLog
+    except ImportError:
+        pass
+    try:
+        from app.modules.ai.models import AIRequest
+    except ImportError:
+        pass
+    try:
+        from app.modules.digital_twin.models import AircraftSystem, Component
+    except ImportError:
+        pass
+    try:
+        from app.modules.vr_telemetry.models import VRSession, VRTelemetryEvent
+    except ImportError:
+        pass
 
 
 import_models()

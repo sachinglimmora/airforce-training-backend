@@ -5,8 +5,17 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+import os
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Detect environment first
+    _env: str = os.getenv("ENV", "local")
+    
+    model_config = SettingsConfigDict(
+        env_file=(".env", f".env.{_env}"), 
+        env_file_encoding="utf-8", 
+        extra="ignore"
+    )
 
     ENV: Literal["local", "development", "staging", "production", "test"] = "local"
 

@@ -86,3 +86,55 @@ If you see this during deployment, ensure you are using `python -m alembic` inst
 * **Health Check:** `GET /health`
 * **Auth Login:** `POST /api/v1/auth/login`
 * **User Info:** `GET /api/v1/auth/me`
+
+
+<!-- Dcoker things 
+
+1. Verify Configuration Files
+Ensure the following files exist and are correctly configured:
+
+server/docker/Dockerfile: This builds your API image. It should install dependencies, copy the app code, and set the entrypoint.
+server/docker-compose.yml: This orchestrates all services (API, DB, Redis, etc.).
+server/scripts/start.sh: This script usually handles database migrations (alembic upgrade head) and starts the server.
+.env file: Ensure your server/.env contains the correct connection strings for Docker services (e.g., DATABASE_URL=postgresql+asyncpg://user:pass@postgres:5432/db).
+2. Run Validation Commands
+Open a terminal in the server directory and run these commands:
+
+A. Build the Images
+Check for any syntax errors in your Dockerfile or dependency issues.
+
+powershell
+cd server
+docker-compose build
+B. Start the Services
+Verify that all services (DB, Redis, API) can start and communicate with each other.
+
+powershell
+docker-compose up -d
+C. Check Container Status
+Ensure all services are "Up" and healthy.
+
+powershell
+docker-compose ps
+D. Inspect Logs
+Check the API logs to ensure migrations were applied successfully and the server is listening.
+
+powershell
+docker-compose logs -f api
+3. Functional Verification
+Once the containers are running:
+
+API Health: Open http://localhost:8000/docs in your browser. If it loads, the API is properly Dockerized and reachable.
+Database Connection: Check the logs to ensure the API successfully connected to the postgres container. 
+
+
+
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+$env:ENV="production"; python -m uvicorn app.main:app --reload
+
+
+
+
+
+-->

@@ -56,6 +56,9 @@ class UsersService:
         for role_name in data.roles:
             await self._assign_role_by_name(user, role_name, assigned_by_id)
 
+        await self.db.flush()
+        await self.db.refresh(user, attribute_names=["user_roles"])
+
         log.info("user_created", user_id=str(user.id), by=assigned_by_id)
         return user
 
