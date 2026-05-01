@@ -1,15 +1,16 @@
 from typing import Annotated
-from fastapi import Depends, Query, UploadFile, File
+
+from fastapi import Depends, File, Query, UploadFile
 from fastapi.routing import APIRouter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.storage import upload_file_to_minio
 from app.database import get_db
 from app.modules.assets.models import Asset
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
-from app.core.storage import upload_file_to_minio
 
 router = APIRouter()
 
@@ -147,7 +148,7 @@ async def upload_asset(
             content_type=file.content_type,
             bucket_name=settings.MINIO_BUCKET_ASSETS
         )
-        
+
         return {
             "data": {
                 "message": "Upload successful",
