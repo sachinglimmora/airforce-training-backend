@@ -15,6 +15,7 @@ import app.modules.checklist.models  # noqa: F401
 import app.modules.competency.models  # noqa: F401
 import app.modules.content.models  # noqa: F401
 import app.modules.procedures.models  # noqa: F401
+import app.modules.quiz.models  # noqa: F401
 import app.modules.scenarios.models  # noqa: F401
 import app.modules.vr_telemetry.models  # noqa: F401
 from app.config import get_settings
