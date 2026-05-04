@@ -162,6 +162,40 @@ tags_metadata = [
         ),
     },
     {
+        "name": "knowledge",
+        "description": (
+            "Technical knowledge base and reference library.\n\n"
+            "Contains technical specifications, operating procedures, and technical orders "
+            "for aircraft and systems. Supports AI-assisted article generation from "
+            "base documentation."
+        ),
+    },
+    {
+        "name": "quizzes",
+        "description": (
+            "Interactive assessments and knowledge checks.\n\n"
+            "Supports multiple-choice, true-false, and fill-in-the-blank questions. "
+            "Includes an AI generation engine that creates quizzes from course content "
+            "and tracks trainee attempt history and scores."
+        ),
+    },
+    {
+        "name": "documents",
+        "description": (
+            "Flight operations document library.\n\n"
+            "Central repository for all technical manuals (FCOM, AMM), procedures (QRH, SOP), "
+            "and technical bulletins. Supports full-text search and aircraft-specific filtering."
+        ),
+    },
+    {
+        "name": "feedback",
+        "description": (
+            "Trainee feedback and instructor evaluations.\n\n"
+            "Aggregates evaluation records into a readable feedback loop for trainees. "
+            "Derives strengths, weaknesses, and improvement areas from rubric-based scores."
+        ),
+    },
+    {
         "name": "progress",
         "description": (
             "Trainee progress aggregation — overall readiness score, competency levels, "
