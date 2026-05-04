@@ -13,7 +13,6 @@ from app.modules.alerts.router import router as alerts_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.assets.router import router as assets_router
 from app.modules.audit.router import router as audit_router
-from app.modules.knowledge.router import router as knowledge_router
 
 # Module routers
 from app.modules.auth.router import router as auth_router
@@ -22,10 +21,14 @@ from app.modules.compatibility.router import router as compatibility_router
 from app.modules.competency.router import router as competency_router
 from app.modules.content.router import router as content_router
 from app.modules.digital_twin.router import router as digital_twin_router
+from app.modules.documents.router import router as documents_router
+from app.modules.feedback.router import router as feedback_router
 from app.modules.instructor.router import router as instructor_router
 from app.modules.instructor_videos.router import router as instructor_videos_router
+from app.modules.knowledge.router import router as knowledge_router
 from app.modules.procedures.router import router as procedures_router
 from app.modules.progress.router import router as progress_router
+from app.modules.quiz.router import router as quiz_router
 from app.modules.scenarios.router import router as scenarios_router
 from app.modules.scenarios.router import simulations_router
 from app.modules.training.router import router as training_router
@@ -93,6 +96,9 @@ def create_app() -> FastAPI:
         instructor_videos_router, prefix=f"{prefix}/instructor-videos", tags=["instructor-videos"]
     )
     app.include_router(admin_router, prefix=f"{prefix}/admin", tags=["admin"])
+    app.include_router(quiz_router, prefix=f"{prefix}/quizzes", tags=["quizzes"])
+    app.include_router(documents_router, prefix=f"{prefix}/documents", tags=["documents"])
+    app.include_router(feedback_router, prefix=f"{prefix}/feedback", tags=["feedback"])
 
     # Health endpoints (no prefix — matched as /health)
     @app.get("/metrics", tags=["health"], include_in_schema=False)
@@ -147,6 +153,8 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup():
+        from app.core.storage import init_buckets
+        init_buckets()
         log.info("aegis_backend_started", env=settings.ENV)
 
     @app.on_event("shutdown")
