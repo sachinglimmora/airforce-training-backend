@@ -64,3 +64,17 @@ class ScenarioSession(Base):
         DateTime(timezone=True), nullable=True
     )
     result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class ScenarioAction(Base):
+    __tablename__ = "scenario_actions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("scenario_sessions.id"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
