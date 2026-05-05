@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Query
 from fastapi.routing import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from app.modules.procedures.models import Deviation, Procedure, ProcedureSession
 router = APIRouter()
 
 _401 = {401: {"description": "Not authenticated"}}
+_403 = {403: {"description": "Forbidden"}}
 _404 = {404: {"description": "Not found"}}
 
 
@@ -24,6 +25,10 @@ class CompleteStepRequest(BaseModel):
 
 class BranchRequest(BaseModel):
     condition: str
+
+
+class ExplainRequest(BaseModel):
+    context: str | None = None
 
 
 @router.get(
@@ -242,12 +247,110 @@ async def complete_step(
 
 
 @router.post(
+    "/sessions/{session_id}/steps/{step_id}/branch",
+    response_model=dict,
+    summary="Navigate a branch point in a procedure",
+    description=(
+        "Records a branch navigation event. "
+        "The chosen child step is returned; unchosen siblings are excluded from skip detection."
+    ),
+    responses={**_401, **_403, **_404},
+    operation_id="procedures_take_branch",
+)
+async def take_branch(
+    session_id: str,
+    step_id: str,
+    body: BranchRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.procedures.service import ProcedureService
+
+    svc = ProcedureService(db)
+    result = await svc.take_branch(
+        session_id=session_id,
+        step_id=step_id,
+        condition=body.condition,
+        current_user_id=str(current_user.id),
+    )
+    return {"data": result}
+
+
+@router.post(
+    "/sessions/{session_id}/steps/{step_id}/explain",
+    response_model=dict,
+    summary="Get an AI explanation of a procedure step",
+    description=(
+        "Returns an AI-generated explanation of a step in context. "
+        "Requires the RAG ExplainService (PR #4) — returns 503 until that PR merges."
+    ),
+    responses={**_401, **_403, **_404},
+    operation_id="procedures_explain_step",
+)
+async def explain_step(
+    session_id: str,
+    step_id: str,
+    body: ExplainRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    # 1. Load step + procedure
+    step_result = await db.execute(select(ProcedureStep).where(ProcedureStep.id == step_id))
+    step = step_result.scalar_one_or_none()
+    if not step:
+        from app.core.exceptions import NotFound
+
+        raise NotFound("Procedure step")
+
+    proc_result = await db.execute(select(Procedure).where(Procedure.id == step.procedure_id))
+    procedure = proc_result.scalar_one_or_none()
+    if not procedure:
+        from app.core.exceptions import NotFound
+
+        raise NotFound("Procedure")
+
+    # 2. Auth: session owner OR instructor/admin
+    session_result = await db.execute(
+        select(ProcedureSession).where(ProcedureSession.id == session_id)
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        from app.core.exceptions import NotFound
+
+        raise NotFound("Procedure session")
+
+    is_owner = str(session.trainee_id) == str(current_user.id)
+    is_privileged = bool(set(current_user.roles) & {"instructor", "admin"})
+    if not is_owner and not is_privileged:
+        from app.core.exceptions import Forbidden
+
+        raise Forbidden("Access denied")
+
+    # 3. Deferred import — ExplainService ships in PR #4
+    try:
+        from app.modules.rag.service import ExplainService
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Explain service not yet available")
+
+    svc = ExplainService(db)
+    result = await svc.explain(
+        topic=f"{step.action_text} (step {step.ordinal} of {procedure.name})",
+        context=body.context or f"Phase: {procedure.phase}, type: {procedure.procedure_type}",
+        system_state=None,
+        aircraft_id=procedure.aircraft_id,
+        user=current_user,
+    )
+    return {"data": result}
+
+
+@router.post(
     "/sessions/{session_id}/complete",
     response_model=dict,
     summary="End a procedure session",
     description=(
         "Marks the session as `completed` and records `ended_at`. "
-        "Call after all required steps have been completed."
+        "Runs skip detection before finalising — any unexecuted, non-excluded steps "
+        "are recorded as Deviation rows."
     ),
     responses={**_401},
     operation_id="procedures_complete_session",
@@ -259,12 +362,49 @@ async def complete_session(
 ):
     from datetime import UTC, datetime
 
+    from app.modules.procedures.service import ProcedureService
+
+    svc = ProcedureService(db)
+
+    # Detect skips before marking complete
+    await svc.detect_skips(session_id)
+
     result = await db.execute(select(ProcedureSession).where(ProcedureSession.id == session_id))
     session = result.scalar_one_or_none()
     if session:
         session.status = "completed"
         session.ended_at = datetime.now(UTC)
+
+    await db.commit()
     return {"data": {"session_id": session_id, "status": "completed"}}
+
+
+@router.post(
+    "/sessions/{session_id}/debrief",
+    response_model=dict,
+    summary="Generate an AI post-session debrief",
+    description=(
+        "Generates a concise AI debrief for a completed procedure session. "
+        "Covers skips, out-of-order steps, and timing deviations with severity context. "
+        "Tone is adjusted for instructor vs. trainee audience."
+    ),
+    responses={**_401, **_403, **_404},
+    operation_id="procedures_debrief",
+)
+async def debrief_session(
+    session_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.procedures.service import ProcedureService
+
+    svc = ProcedureService(db)
+    result = await svc.generate_debrief(
+        session_id=session_id,
+        current_user_id=str(current_user.id),
+        current_user_roles=current_user.roles,
+    )
+    return {"data": result}
 
 
 @router.get(
@@ -273,16 +413,34 @@ async def complete_session(
     summary="Get deviations detected in a session",
     description=(
         "Returns all deviations recorded for the session — skip, out-of-order, timing, "
-        "wrong-action, and incomplete step events — with severity ratings."
+        "wrong-action, and incomplete step events — with severity ratings. "
+        "Access: session owner, instructors, and admins."
     ),
-    responses={**_401},
+    responses={**_401, **_403},
     operation_id="procedures_deviations",
 )
 async def get_deviations(
     session_id: str,
-    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    # Load session for ownership check
+    session_result = await db.execute(
+        select(ProcedureSession).where(ProcedureSession.id == session_id)
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        from app.core.exceptions import NotFound
+
+        raise NotFound("Procedure session")
+
+    is_owner = str(session.trainee_id) == str(current_user.id)
+    is_privileged = bool(set(current_user.roles) & {"instructor", "admin"})
+    if not is_owner and not is_privileged:
+        from app.core.exceptions import Forbidden
+
+        raise Forbidden("Access denied")
+
     result = await db.execute(select(Deviation).where(Deviation.session_id == session_id))
     devs = result.scalars().all()
     return {
