@@ -1,29 +1,29 @@
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends, File, Form, UploadFile, HTTPException
+from fastapi import Depends, File, Form, HTTPException, UploadFile
 from fastapi.routing import APIRouter
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, or_
-from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
+from sqlalchemy import delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.storage import upload_file_to_minio
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
-from app.modules.instructor_videos.models import InstructorVideo, video_assignments
-from app.config import get_settings
-from app.core.storage import upload_file_to_minio
+from app.modules.instructor_videos.models import InstructorVideo
 
 router = APIRouter()
-settings = get_settings()
+settings_ref = None  # settings imported lazily to avoid circular deps
 
 _401 = {401: {"description": "Not authenticated"}}
 _404 = {404: {"description": "Video not found"}}
 
+
 class VideoAssignment(BaseModel):
-    traineeIds: list[uuid.UUID]
+    trainee_ids: list[uuid.UUID]
+
 
 def _format_video(video: InstructorVideo):
     """Helper to format video for frontend"""
@@ -43,6 +43,7 @@ def _format_video(video: InstructorVideo):
         "createdAt": video.created_at.isoformat(),
         "updatedAt": video.updated_at.isoformat(),
     }
+
 
 @router.get(
     "",
@@ -64,6 +65,7 @@ async def list_videos(
     videos = result.scalars().unique().all()
     return {"data": [_format_video(v) for v in videos]}
 
+
 @router.get(
     "/my-assignments",
     response_model=dict,
@@ -79,7 +81,7 @@ async def get_my_assignments(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
 ):
     from app.modules.auth.models import User
-    
+
     # Filter for public videos OR videos where the trainee is in the assignedTo list
     stmt = (
         select(InstructorVideo)
@@ -87,8 +89,8 @@ async def get_my_assignments(
         .outerjoin(InstructorVideo.assigned_trainees)
         .where(
             or_(
-                InstructorVideo.is_public == True,
-                User.id == uuid.UUID(current_user.id)
+                InstructorVideo.is_public,
+                User.id == uuid.UUID(current_user.id),
             )
         )
         .distinct()
@@ -96,6 +98,7 @@ async def get_my_assignments(
     result = await db.execute(stmt)
     videos = result.scalars().unique().all()
     return {"data": [_format_video(v) for v in videos]}
+
 
 @router.post(
     "/upload",
@@ -109,7 +112,7 @@ async def get_my_assignments(
         "- `description` (optional)\n"
         "- `category` (optional) — matches `CourseCategory`\n"
         "- `difficulty` (optional) — beginner | intermediate | advanced\n"
-        "- `isPublic` (optional) — boolean string\n"
+        "- `is_public` (optional) — boolean string\n"
         "- `tags` (optional) — comma-separated tag string"
     ),
     responses={**_401, 400: {"description": "Unsupported file format"}},
@@ -120,7 +123,7 @@ async def upload_video(
     description: str | None = Form(None),
     category: str | None = Form(None),
     difficulty: str | None = Form(None),
-    isPublic: str | None = Form(None),
+    is_public: str | None = Form(None),
     tags: str | None = Form(None),
     video: UploadFile = File(...),
     db: Annotated[AsyncSession, Depends(get_db)] = None,
@@ -131,7 +134,7 @@ async def upload_video(
         file_obj=video.file,
         filename=video.filename,
         content_type=video.content_type,
-        bucket_name="instructor-videos"
+        bucket_name="instructor-videos",
     )
 
     new_video = InstructorVideo(
@@ -141,27 +144,32 @@ async def upload_video(
         video_url=file_url,
         category=category or "General",
         difficulty=difficulty or "intermediate",
-        is_public=isPublic.lower() == "true" if isPublic else False,
+        is_public=is_public.lower() == "true" if is_public else False,
         tags=tags.split(",") if tags else [],
     )
-    
+
     db.add(new_video)
     await db.commit()
     await db.refresh(new_video)
-    
+
     # Reload with relationships
-    stmt = select(InstructorVideo).where(InstructorVideo.id == new_video.id).options(selectinload(InstructorVideo.assigned_trainees))
+    stmt = (
+        select(InstructorVideo)
+        .where(InstructorVideo.id == new_video.id)
+        .options(selectinload(InstructorVideo.assigned_trainees))
+    )
     result = await db.execute(stmt)
     new_video = result.scalar_one()
-    
+
     return {"data": _format_video(new_video)}
+
 
 @router.post(
     "/{video_id}/assign",
     response_model=dict,
     summary="Assign a video to trainees",
     description=(
-        'Makes a video visible to specific trainees.\n\nBody: `{ "traineeIds": ["uuid", ...] }`'
+        'Makes a video visible to specific trainees.\n\nBody: `{ "trainee_ids": ["uuid", ...] }`'
     ),
     responses={**_401, **_404},
     operation_id="instructor_videos_assign",
@@ -172,29 +180,34 @@ async def assign_video(
     db: Annotated[AsyncSession, Depends(get_db)],
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
 ):
-    stmt = select(InstructorVideo).where(InstructorVideo.id == video_id).options(selectinload(InstructorVideo.assigned_trainees))
+    stmt = (
+        select(InstructorVideo)
+        .where(InstructorVideo.id == video_id)
+        .options(selectinload(InstructorVideo.assigned_trainees))
+    )
     result = await db.execute(stmt)
     video = result.scalar_one_or_none()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-        
+
     from app.modules.auth.models import User
-    
-    for trainee_id in body.traineeIds:
+
+    for trainee_id in body.trainee_ids:
         trainee_result = await db.execute(select(User).where(User.id == trainee_id))
         trainee = trainee_result.scalar_one_or_none()
         if trainee and trainee not in video.assigned_trainees:
             video.assigned_trainees.append(trainee)
-    
+
     await db.commit()
     await db.refresh(video)
-    
+
     return {
         "data": {
             "message": "Video assigned successfully",
-            "video": _format_video(video)
+            "video": _format_video(video),
         }
     }
+
 
 @router.delete(
     "/{video_id}/assign/{trainee_id}",
@@ -210,17 +223,20 @@ async def unassign_video(
     db: Annotated[AsyncSession, Depends(get_db)],
     _current_user: Annotated[CurrentUser, Depends(get_current_user)] = None,
 ):
-    stmt = select(InstructorVideo).where(InstructorVideo.id == video_id).options(selectinload(InstructorVideo.assigned_trainees))
+    stmt = (
+        select(InstructorVideo)
+        .where(InstructorVideo.id == video_id)
+        .options(selectinload(InstructorVideo.assigned_trainees))
+    )
     result = await db.execute(stmt)
     video = result.scalar_one_or_none()
-    
+
     if video:
-        video.assigned_trainees = [t for t in video.assigned_trainees if t.id == trainee_id] # Wait, this is WRONG! Should be !=
-        # Fixed logic below
         video.assigned_trainees = [t for t in video.assigned_trainees if t.id != trainee_id]
         await db.commit()
-        
+
     return {"data": {"message": "Video unassigned successfully"}}
+
 
 @router.delete(
     "/{video_id}",
