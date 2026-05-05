@@ -1,10 +1,11 @@
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
+from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.routing import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -12,6 +13,7 @@ from app.modules.ai.schemas import CompletionRequest
 from app.modules.ai.service import AIService
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
+from app.modules.rag.quiz_service import QuizService
 
 router = APIRouter()
 
@@ -94,6 +96,50 @@ async def send_message(
             },
         }
     }
+
+
+class QuizRequest(BaseModel):
+    topic: str = Field(..., min_length=1)
+    module_id: str | None = None
+    aircraft_id: UUID | None = None
+    difficulty: Literal["beginner", "intermediate", "advanced"] = "intermediate"
+    num_questions: int = Field(default=5, ge=1, le=10)
+
+
+@router.post(
+    "/quiz",
+    response_model=dict,
+    summary="Generate an adaptive multiple-choice quiz",
+    description=(
+        "Generates N multiple-choice questions about a given topic, grounded in retrieved "
+        "FCOM/QRH chunks via RAG. Returns questions, answer key, explanations, and source "
+        "citations. Stateless — no session persistence."
+    ),
+    responses={
+        **_401,
+        400: {"description": "topic is required"},
+        422: {"description": "Validation error (num_questions out of 1-10 range, etc.)"},
+        502: {"description": "All LLM providers unreachable"},
+    },
+    operation_id="ai_assistant_generate_quiz",
+)
+async def generate_quiz(
+    body: QuizRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not body.topic.strip():
+        raise HTTPException(400, "topic is required")
+    svc = QuizService(db)
+    result = await svc.generate_quiz(
+        topic=body.topic.strip(),
+        aircraft_id=body.aircraft_id,
+        module_id=body.module_id,
+        difficulty=body.difficulty,
+        num_questions=body.num_questions,
+        user=current_user,
+    )
+    return {"data": result}
 
 
 @router.delete(
