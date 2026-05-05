@@ -12,6 +12,30 @@ def _now():
     return datetime.now(UTC)
 
 
+class SystemDependency(Base):
+    __tablename__ = "system_dependencies"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    source_system_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("aircraft_systems.id"), nullable=False
+    )
+    target_system_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("aircraft_systems.id"), nullable=False
+    )
+    dependency_type: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )  # "powers", "controls", "signals", "feeds"
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    source: Mapped["AircraftSystem"] = relationship(
+        "AircraftSystem", foreign_keys=[source_system_id]
+    )
+    target: Mapped["AircraftSystem"] = relationship(
+        "AircraftSystem", foreign_keys=[target_system_id]
+    )
+
+
 class AircraftSystem(Base):
     __tablename__ = "aircraft_systems"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

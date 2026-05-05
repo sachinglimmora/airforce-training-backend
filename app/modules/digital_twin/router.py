@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
+from app.modules.digital_twin.dependency_router import router as dependency_router
 from app.modules.digital_twin.models import AircraftSystem, Component
 
 router = APIRouter()
@@ -174,3 +175,6 @@ async def update_component(
             },
         }
     }
+
+
+router.include_router(dependency_router)
