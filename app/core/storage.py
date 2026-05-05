@@ -39,10 +39,14 @@ def ensure_bucket_exists(bucket_name: str):
         print(f"Error checking/creating bucket {bucket_name}: {e}")
 
 
-# Ensure buckets exist and are public
-ensure_bucket_exists(settings.MINIO_BUCKET_ASSETS)
-ensure_bucket_exists(settings.MINIO_BUCKET_CONTENT)
-ensure_bucket_exists("instructor-videos")
+# Ensure buckets exist and are public — guarded so MinIO unavailability at import
+# time (e.g. CI/test environments) does not prevent module load.
+try:
+    ensure_bucket_exists(settings.MINIO_BUCKET_ASSETS)
+    ensure_bucket_exists(settings.MINIO_BUCKET_CONTENT)
+    ensure_bucket_exists("instructor-videos")
+except Exception as e:  # noqa: BLE001
+    print(f"Warning: MinIO not reachable at startup, bucket init skipped: {e}")
 
 
 def upload_file_to_minio(file_obj, filename: str, content_type: str, bucket_name: str) -> str:
