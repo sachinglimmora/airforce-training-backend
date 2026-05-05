@@ -14,6 +14,11 @@ from app.modules.digital_twin.models import AircraftSystem, Component
 
 router = APIRouter()
 
+# Include dependency router BEFORE dynamic /{system_id} routes so that the
+# static path /dependency-graph is registered first and is not swallowed by
+# the greedy /{system_id} pattern.
+router.include_router(dependency_router)
+
 _401 = {401: {"description": "Not authenticated"}}
 _404 = {404: {"description": "Not found"}}
 
@@ -175,6 +180,3 @@ async def update_component(
             },
         }
     }
-
-
-router.include_router(dependency_router)
