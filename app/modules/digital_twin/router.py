@@ -9,9 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.schemas import CurrentUser
+from app.modules.digital_twin.dependency_router import router as dependency_router
 from app.modules.digital_twin.models import AircraftSystem, Component
 
 router = APIRouter()
+
+# Include dependency router BEFORE dynamic /{system_id} routes so that the
+# static path /dependency-graph is registered first and is not swallowed by
+# the greedy /{system_id} pattern.
+router.include_router(dependency_router)
 
 _401 = {401: {"description": "Not authenticated"}}
 _404 = {404: {"description": "Not found"}}

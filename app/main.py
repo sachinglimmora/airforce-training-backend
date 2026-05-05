@@ -13,7 +13,6 @@ from app.modules.alerts.router import router as alerts_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.assets.router import router as assets_router
 from app.modules.audit.router import router as audit_router
-from app.modules.knowledge.router import router as knowledge_router
 
 # Module routers
 from app.modules.auth.router import router as auth_router
@@ -24,6 +23,7 @@ from app.modules.content.router import router as content_router
 from app.modules.digital_twin.router import router as digital_twin_router
 from app.modules.instructor.router import router as instructor_router
 from app.modules.instructor_videos.router import router as instructor_videos_router
+from app.modules.knowledge.router import router as knowledge_router
 from app.modules.procedures.router import router as procedures_router
 from app.modules.progress.router import router as progress_router
 from app.modules.scenarios.router import router as scenarios_router
@@ -83,9 +83,9 @@ def create_app() -> FastAPI:
     app.include_router(assets_router, prefix=f"{prefix}/assets", tags=["assets"])
     app.include_router(knowledge_router, prefix=f"{prefix}/knowledge", tags=["knowledge"])
     app.include_router(training_router, prefix=f"{prefix}", tags=["training"])
+    app.include_router(digital_twin_router, prefix=f"{prefix}/digital-twin", tags=["digital-twin"])
     app.include_router(compatibility_router, prefix=f"{prefix}", tags=["compatibility"])
     app.include_router(instructor_router, prefix=f"{prefix}/instructor", tags=["instructor"])
-    app.include_router(digital_twin_router, prefix=f"{prefix}/digital-twin", tags=["digital-twin"])
     app.include_router(progress_router, prefix=f"{prefix}/progress", tags=["progress"])
     app.include_router(ai_assistant_router, prefix=f"{prefix}/ai-assistant", tags=["ai-assistant"])
     app.include_router(alerts_router, prefix=f"{prefix}/alerts", tags=["alerts"])
