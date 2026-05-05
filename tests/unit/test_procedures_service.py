@@ -374,7 +374,7 @@ async def test_generate_debrief_mocks_ai_service():
     }
 
     with patch(
-        "app.modules.procedures.service.AIService"
+        "app.modules.ai.service.AIService"
     ) as mock_ai_service:
         mock_instance = AsyncMock()
         mock_instance.complete.return_value = mock_ai_result
