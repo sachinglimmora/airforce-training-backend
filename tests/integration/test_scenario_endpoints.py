@@ -1,4 +1,4 @@
-"""Integration tests for Scenario Engine endpoints.
+﻿"""Integration tests for Scenario Engine endpoints.
 
 Uses the shared db_session + client fixtures from tests/conftest.py.
 All DB objects are created via ORM and rolled back after each test.
@@ -235,7 +235,7 @@ class TestCompleteSession:
         from app.main import app
 
         trainee = await _seed_user(db_session, roles=["trainee"])
-        scenario = await _seed_scenario(db_session)  # no procedure → manual scoring
+        scenario = await _seed_scenario(db_session)  # no procedure â†’ manual scoring
         session = await _seed_session(db_session, scenario, trainee, status="in_progress")
 
         user = CurrentUser(id=str(trainee.id), roles=["trainee"])
@@ -311,7 +311,7 @@ class TestPatchSession:
         scenario = await _seed_scenario(db_session)
         session = await _seed_session(db_session, scenario, trainee)
 
-        # Trainee trying to assign → forbidden
+        # Trainee trying to assign â†’ forbidden
         user = CurrentUser(id=str(trainee.id), roles=["trainee"])
         _override_user(app, user)
 
@@ -362,7 +362,7 @@ class TestDebriefEndpoint:
         }
 
         with patch(
-            "app.modules.scenarios.service.AIService.complete",
+            "app.modules.ai.service.AIService.complete",
             new=AsyncMock(return_value=mock_ai_result),
         ):
             resp = await client.post(f"/api/v1/scenarios/sessions/{session.id}/debrief")
@@ -423,7 +423,7 @@ class TestDebriefEndpoint:
         }
 
         with patch(
-            "app.modules.scenarios.service.AIService.complete",
+            "app.modules.ai.service.AIService.complete",
             new=AsyncMock(return_value=mock_ai_result),
         ):
             resp = await client.post(f"/api/v1/scenarios/sessions/{session.id}/debrief")
