@@ -1,8 +1,10 @@
 import uuid
-from datetime import datetime, UTC
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Table
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 # Association table for video assignments
