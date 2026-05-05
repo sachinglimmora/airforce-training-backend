@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated
 
 from fastapi import Depends
@@ -27,6 +28,14 @@ class TriggerRequest(BaseModel):
 class ActionRequest(BaseModel):
     action: str
     payload: dict = {}
+
+
+class StartSessionRequest(BaseModel):
+    instructor_id: uuid.UUID | None = None
+
+
+class PatchSessionRequest(BaseModel):
+    instructor_id: uuid.UUID
 
 
 @router.get(
@@ -178,8 +187,37 @@ async def start_session(
     scenario_id: str,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    body: StartSessionRequest | None = None,
 ):
-    session = ScenarioSession(scenario_id=scenario_id, trainee_id=current_user.id)
+    instructor_id = None
+
+    if body and body.instructor_id:
+        from fastapi import HTTPException, status
+
+        from app.modules.auth.models import User
+
+        user_result = await db.execute(
+            select(User).where(User.id == body.instructor_id)
+        )
+        target_user = user_result.scalar_one_or_none()
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Instructor user not found",
+            )
+        target_roles = target_user.roles
+        if not (set(target_roles) & {"instructor", "admin"}):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Specified user does not have instructor or admin role",
+            )
+        instructor_id = body.instructor_id
+
+    session = ScenarioSession(
+        scenario_id=scenario_id,
+        trainee_id=current_user.id,
+        instructor_id=instructor_id,
+    )
     db.add(session)
     await db.flush()
     return {
@@ -211,17 +249,15 @@ async def trigger_event(
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from datetime import UTC, datetime
+    from app.modules.scenarios.service import ScenarioService
 
-    result = await db.execute(select(ScenarioSession).where(ScenarioSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if session:
-        session.trigger_fired_at = datetime.now(UTC)
+    svc = ScenarioService(db)
+    session = await svc.fire_trigger(session_id=session_id, event=body.event)
     return {
         "data": {
             "session_id": session_id,
             "trigger": body.event,
-            "fired_at": session.trigger_fired_at.isoformat() if session else None,
+            "fired_at": session.trigger_fired_at.isoformat() if session.trigger_fired_at else None,
         }
     }
 
@@ -242,9 +278,17 @@ async def record_action(
     session_id: str,
     body: ActionRequest,
     _current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    _db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    return {"data": {"session_id": session_id, "action": body.action, "recorded": True}}
+    from app.modules.scenarios.service import ScenarioService
+
+    svc = ScenarioService(db)
+    result = await svc.record_action(
+        session_id=session_id,
+        action=body.action,
+        payload=body.payload if body.payload else None,
+    )
+    return {"data": result}
 
 
 @router.get(
@@ -270,6 +314,90 @@ async def get_result(
 
         raise NotFound("Scenario session")
     return {"data": {"session_id": session_id, "result": session.result, "status": session.status}}
+
+
+@router.post(
+    "/sessions/{session_id}/complete",
+    response_model=dict,
+    summary="Complete a scenario session and run scoring",
+    description=(
+        "Marks the session as completed, runs the scoring engine against the linked procedure "
+        "(if any), and writes the result to `session.result`."
+    ),
+    responses={**_401, **_404},
+    operation_id="scenarios_complete_session",
+)
+async def complete_session(
+    session_id: str,
+    _current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.scenarios.service import ScenarioService
+
+    svc = ScenarioService(db)
+    result_payload = await svc.complete_session(session_id=session_id)
+    return {"data": {"session_id": session_id, "result": result_payload}}
+
+
+@router.patch(
+    "/sessions/{session_id}",
+    response_model=dict,
+    summary="Assign or update session instructor",
+    description=(
+        "Assigns an instructor to the session. "
+        "Instructors may self-assign; admins may assign any qualified user."
+    ),
+    responses={**_401, **_404},
+    operation_id="scenarios_patch_session",
+)
+async def patch_session(
+    session_id: str,
+    body: PatchSessionRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.scenarios.service import ScenarioService
+
+    svc = ScenarioService(db)
+    session = await svc.assign_instructor(
+        session_id=session_id,
+        instructor_id=str(body.instructor_id),
+        current_user_id=current_user.id,
+        current_user_roles=current_user.roles,
+    )
+    return {
+        "data": {
+            "session_id": str(session.id),
+            "instructor_id": str(session.instructor_id) if session.instructor_id else None,
+        }
+    }
+
+
+@router.post(
+    "/sessions/{session_id}/debrief",
+    response_model=dict,
+    summary="Generate AI debrief for completed session",
+    description=(
+        "Calls the AI gateway to generate a post-scenario debrief tailored to the "
+        "audience (trainee or instructor/admin). Session must be completed first."
+    ),
+    responses={**_401, **_404},
+    operation_id="scenarios_debrief",
+)
+async def generate_debrief(
+    session_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from app.modules.scenarios.service import ScenarioService
+
+    svc = ScenarioService(db)
+    result = await svc.generate_debrief(
+        session_id=session_id,
+        current_user_id=current_user.id,
+        current_user_roles=current_user.roles,
+    )
+    return {"data": result}
 
 
 @simulations_router.post(
