@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.analytics.models import SessionEvent, TrainingSession
+from app.modules.auth.models import User
 from app.modules.auth.schemas import CurrentUser
 from app.modules.procedures.models import Deviation, Procedure, ProcedureSession, ProcedureStep
 
@@ -28,6 +29,19 @@ def _trainee_user(user_id: str) -> CurrentUser:
 
 def _instructor_user(user_id: str) -> CurrentUser:
     return CurrentUser(id=user_id, roles=["instructor"], jti="")
+
+
+async def _seed_user(db: AsyncSession, user_id: str) -> User:
+    """Insert a minimal User row so FK constraints on training_sessions are satisfied."""
+    user = User(
+        id=uuid.UUID(user_id),
+        email=f"{user_id[:8]}@test.local",
+        password_hash="x",
+        full_name="Test User",
+    )
+    db.add(user)
+    await db.flush()
+    return user
 
 
 async def _seed_procedure(db: AsyncSession) -> tuple[Procedure, list[ProcedureStep]]:
@@ -95,7 +109,8 @@ async def _seed_procedure(db: AsyncSession) -> tuple[Procedure, list[ProcedureSt
 async def _seed_session(
     db: AsyncSession, proc: Procedure, trainee_id: str
 ) -> ProcedureSession:
-    """Create a TrainingSession + ProcedureSession pair."""
+    """Create a User + TrainingSession + ProcedureSession triplet."""
+    await _seed_user(db, trainee_id)
     ts = TrainingSession(
         trainee_id=uuid.UUID(trainee_id),
         session_type="procedure",
@@ -350,7 +365,7 @@ async def test_debrief_completed_session(client: AsyncClient, db_session: AsyncS
 
     try:
         with patch(
-            "app.modules.procedures.service.AIService"
+            "app.modules.ai.service.AIService"
         ) as mock_ai:
             mock_instance = AsyncMock()
             mock_instance.complete.return_value = mock_ai_result
