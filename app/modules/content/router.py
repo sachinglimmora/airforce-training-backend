@@ -102,6 +102,58 @@ async def upload_source(
 
 
 @router.get(
+    "/sources/needs-review",
+    response_model=dict,
+    summary="List sources whose next_review_due is in the past (admin/instructor)",
+    operation_id="content_sources_needs_review",
+)
+async def needs_review_endpoint(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    source_type: str | None = None,
+    aircraft_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not (set(current_user.roles) & {"admin", "instructor"}):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    svc = ContentService(db)
+    rows = await svc.list_needs_review(
+        source_type=source_type, aircraft_id=aircraft_id, limit=limit, offset=offset
+    )
+    return {"data": [ContentSourceOut.model_validate(r).model_dump(mode="json") for r in rows]}
+
+
+@router.get(
+    "/sources/expiring-soon",
+    response_model=dict,
+    summary="List sources whose next_review_due falls within `within_days` (admin/instructor)",
+    operation_id="content_sources_expiring_soon",
+)
+async def expiring_soon_endpoint(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    within_days: int | None = None,
+    source_type: str | None = None,
+    aircraft_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not (set(current_user.roles) & {"admin", "instructor"}):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    from app.config import get_settings
+    s = get_settings()
+    window = within_days if within_days is not None else s.CONTENT_EXPIRING_SOON_WINDOW_DAYS
+    svc = ContentService(db)
+    rows = await svc.list_expiring_soon(
+        within_days=window, source_type=source_type, aircraft_id=aircraft_id, limit=limit, offset=offset
+    )
+    return {"data": [ContentSourceOut.model_validate(r).model_dump(mode="json") for r in rows]}
+
+
+@router.get(
     "/sources/{source_id}",
     response_model=dict,
     summary="Get source metadata",
@@ -195,6 +247,34 @@ async def approve_source(
 
 
 @router.post(
+    "/sources/{source_id}/reembed",
+    status_code=202,
+    response_model=dict,
+    summary="Force re-embedding of a source (admin)",
+    description=(
+        "Deletes existing chunks for the source_id and re-runs the embedding worker. "
+        "Use after chunker improvements or model changes.\n\n"
+        "**Required permission:** `content:approve` (admin/instructor)."
+    ),
+    responses={**_401, **_403, **_404},
+    operation_id="content_sources_reembed",
+)
+async def reembed_source_endpoint(
+    source_id: str,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.role not in ("admin", "instructor"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    svc = ContentService(db)
+    src = await svc.get_source(source_id)  # 404s if missing
+    from app.modules.rag.tasks import reembed_source
+    reembed_source.delay(str(src.id))
+    return {"data": {"source_id": str(src.id), "status": "reembedding"}}
+
+
+@router.post(
     "/sources/{source_id}/archive",
     response_model=dict,
     dependencies=[require_permission("content", "update")],
@@ -262,6 +342,33 @@ async def resolve_citation(
     svc = ContentService(db)
     ref = await svc.resolve_citation(citation_key)
     return {"data": ContentReferenceOut.model_validate(ref).model_dump()}
+
+
+@router.post(
+    "/sources/{source_id}/mark-reviewed",
+    response_model=dict,
+    summary="Mark a content source as reviewed (admin/instructor)",
+    description=(
+        "Bumps `last_reviewed_at` to now and advances `next_review_due` by the cadence "
+        "for the source's type (or by the override if provided in the body)."
+    ),
+    operation_id="content_sources_mark_reviewed",
+)
+async def mark_reviewed_endpoint(
+    source_id: str,
+    body: dict | None,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not (set(current_user.roles) & {"admin", "instructor"}):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin or instructor required")
+    from app.modules.content.schemas import MarkReviewedRequest
+    payload = MarkReviewedRequest.model_validate(body or {})
+    svc = ContentService(db)
+    src = await svc.mark_reviewed(source_id, current_user.id, payload.next_review_in_days)
+    await db.commit()
+    return {"data": ContentSourceOut.model_validate(src).model_dump(mode="json")}
 
 
 @router.get(

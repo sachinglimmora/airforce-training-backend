@@ -26,6 +26,7 @@ from app.modules.instructor.router import router as instructor_router
 from app.modules.instructor_videos.router import router as instructor_videos_router
 from app.modules.procedures.router import router as procedures_router
 from app.modules.progress.router import router as progress_router
+from app.modules.rag.router import router as rag_router
 from app.modules.scenarios.router import router as scenarios_router
 from app.modules.scenarios.router import simulations_router
 from app.modules.training.router import router as training_router
@@ -83,11 +84,12 @@ def create_app() -> FastAPI:
     app.include_router(assets_router, prefix=f"{prefix}/assets", tags=["assets"])
     app.include_router(knowledge_router, prefix=f"{prefix}/knowledge", tags=["knowledge"])
     app.include_router(training_router, prefix=f"{prefix}", tags=["training"])
+    app.include_router(ai_assistant_router, prefix=f"{prefix}/ai-assistant", tags=["ai-assistant"])
     app.include_router(compatibility_router, prefix=f"{prefix}", tags=["compatibility"])
     app.include_router(instructor_router, prefix=f"{prefix}/instructor", tags=["instructor"])
     app.include_router(digital_twin_router, prefix=f"{prefix}/digital-twin", tags=["digital-twin"])
     app.include_router(progress_router, prefix=f"{prefix}/progress", tags=["progress"])
-    app.include_router(ai_assistant_router, prefix=f"{prefix}/ai-assistant", tags=["ai-assistant"])
+    app.include_router(rag_router, prefix=f"{prefix}/rag", tags=["rag"])
     app.include_router(alerts_router, prefix=f"{prefix}/alerts", tags=["alerts"])
     app.include_router(
         instructor_videos_router, prefix=f"{prefix}/instructor-videos", tags=["instructor-videos"]
@@ -148,6 +150,19 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup():
         log.info("aegis_backend_started", env=settings.ENV)
+
+    @app.on_event("startup")
+    async def _validate_embedding_dim():
+        if not (settings.OPENAI_API_KEY or settings.GEMINI_API_KEY):
+            log.warning("embedding_dim_check_skipped", reason="no_api_keys")
+            return
+        try:
+            from app.modules.rag.embedder import embed_and_validate
+            vec = await embed_and_validate(["dimension check"])
+            log.info("embedding_dim_validated", dim=len(vec[0]))
+        except Exception as exc:
+            log.error("embedding_dim_check_failed", error=str(exc))
+            raise
 
     @app.on_event("shutdown")
     async def shutdown():

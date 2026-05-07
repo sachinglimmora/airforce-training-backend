@@ -16,7 +16,15 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    imports=("app.modules.rag.tasks",),
 )
+
+celery_app.conf.beat_schedule = {
+    "auto-close-idle-sessions-daily": {
+        "task": "rag.auto_close_idle_sessions",
+        "schedule": 24 * 60 * 60,  # every 24h
+    },
+}
 
 
 @celery_app.task(name="content.parse_document")
